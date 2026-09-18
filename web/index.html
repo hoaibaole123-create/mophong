@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Cache-Control" content="no-cache">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mô phỏng 3D vị trí bình chữa cháy — Thuỷ điện Ialy mở rộng</title>
+<style>
+  :root{
+    --bg:#0e1116; --panel:#161b22; --panel2:#1c232c; --line:#2b3441;
+    --text:#e6edf3; --muted:#9aa7b4; --accent:#f0883e; --ok:#3fb950;
+    --abc:#e23b2e; --co25:#2f74d0; --co224:#1f9d6b;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;font-family:"Segoe UI",system-ui,sans-serif;background:var(--bg);color:var(--text);overflow:hidden}
+  #app{display:flex;height:100%}
+  #side{width:302px;min-width:302px;background:var(--panel);border-right:1px solid var(--line);
+        display:flex;flex-direction:column;overflow:hidden}
+  #side header{padding:12px 14px;border-bottom:1px solid var(--line)}
+  #side h1{font-size:15px;margin:0 0 4px}
+  #side .sub{font-size:11px;color:var(--muted);line-height:1.45}
+  #side .scroll{overflow-y:auto;padding:10px 12px 24px;flex:1}
+  .sec{margin-bottom:16px}
+  .sec h2{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0 0 8px}
+  .stat{display:flex;gap:8px;flex-wrap:wrap}
+  .chip{background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:6px 9px;font-size:12px}
+  .chip b{font-size:15px;display:block}
+  .row{display:flex;align-items:center;gap:8px;font-size:13px;padding:5px 6px;border-radius:6px;cursor:pointer}
+  .row:hover{background:var(--panel2)}
+  .row.active{background:#243244;outline:1px solid #3b5570}
+  .row .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .row .ct{font-size:11px;color:var(--muted)}
+  .dot{width:10px;height:10px;border-radius:50%;flex:none}
+  input[type=search],input[type=number]{width:100%;background:var(--panel2);border:1px solid var(--line);
+    color:var(--text);border-radius:6px;padding:7px 9px;font-size:13px}
+  input[type=range]{width:100%}
+  button{background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:6px;
+    padding:7px 10px;font-size:12px;cursor:pointer}
+  button:hover{border-color:#4a5a6c}
+  button.pri{background:#243244;border-color:#3b5570}
+  .btns{display:flex;gap:6px;flex-wrap:wrap}
+  label.lbl{font-size:12px;color:var(--muted);display:block;margin:8px 0 4px}
+  #view{flex:1;position:relative}
+  canvas{display:block}
+  #tip{position:absolute;pointer-events:none;background:#0b0e13ee;border:1px solid var(--line);
+    border-radius:6px;padding:6px 9px;font-size:12px;display:none;z-index:5;white-space:nowrap}
+  #info{position:absolute;right:14px;top:14px;width:280px;background:#11161deb;border:1px solid var(--line);
+    border-radius:10px;padding:12px 14px;font-size:13px;display:none;backdrop-filter:blur(4px)}
+  #info h3{margin:0 0 8px;font-size:14px}
+  #info .k{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.05em}
+  #info .v{margin-bottom:7px}
+  #info .close{position:absolute;right:8px;top:6px;cursor:pointer;color:var(--muted)}
+  #burger{position:absolute;left:10px;top:10px;z-index:6;display:none}
+  #app.collapsed #side{display:none}
+  #app.collapsed #burger{display:block}
+  #hud{position:absolute;left:14px;bottom:12px;font-size:11px;color:var(--muted);line-height:1.6}
+  .warn{font-size:11px;color:#d0a24c;line-height:1.5;background:#2a220e;border:1px solid #4a3c13;
+        border-radius:6px;padding:7px 9px}
+  .legend-i{display:flex;align-items:center;gap:7px;font-size:12px;padding:3px 0}
+  .tabs{display:flex;border-bottom:1px solid var(--line);background:var(--panel)}
+  .tabs button{flex:1;border:0;border-radius:0;background:transparent;padding:9px 4px;font-size:13px;
+    color:var(--muted);border-bottom:2px solid transparent}
+  .tabs button.on{color:var(--text);border-bottom-color:var(--accent);background:#1b2029}
+  .tool{display:flex;align-items:center;gap:8px;font-size:13px;padding:7px 8px;border-radius:6px;
+    cursor:pointer;border:1px solid var(--line);background:var(--panel2);margin-bottom:6px}
+  .tool.on{background:#3a2a12;border-color:#6d4f1d;color:#ffd79a}
+  .tool .kbd{margin-left:auto;font-size:10px;color:var(--muted)}
+  .num{display:flex;align-items:center;gap:8px;margin:6px 0}
+  .num label{font-size:12px;color:var(--muted);flex:1}
+  .num input{width:88px}
+  .objrow{display:flex;gap:6px;align-items:center;font-size:12px;padding:4px 6px;border-radius:5px}
+  .objrow:hover{background:var(--panel2)}
+  .objrow .x{cursor:pointer;color:#e2706a}
+  #dhint{position:absolute;left:50%;transform:translateX(-50%);bottom:42px;background:#0b0e13e6;
+    border:1px solid var(--line);border-radius:8px;padding:7px 12px;font-size:12px;display:none}
+</style>
+</head>
+<body>
+<div id="app">
+  <aside id="side">
+    <header>
+      <h1>Bình chữa cháy — Ialy mở rộng
+        <span id="collapse" style="float:right;cursor:pointer;color:#9aa7b4" title="Thu gọn">⟨⟨</span></h1>
+      <div class="sub" id="hdrsub"></div>
+    </header>
+    <div class="tabs">
+      <button id="tabView" class="on">Xem</button>
+      <button id="tabDesign">Thiết kế</button>
+    </div>
+    <div class="scroll" id="paneDesign" style="display:none">
+      <div class="sec">
+        <h2>Vẽ thêm vào cao trình đang chọn</h2>
+        <div class="sub" id="dtarget" style="margin-bottom:8px"></div>
+        <div class="tool on" data-tool="sel">🖱 Chọn / xoá<span class="kbd">1</span></div>
+        <div class="sub" style="margin:-2px 0 8px">Bấm thẳng vào khối đã vẽ → khối chuyển vàng,
+        dòng tương ứng trong danh sách sáng lên. Xoá bằng phím <b>Delete</b>/<b>Backspace</b>
+        hoặc nút 🗑 bên dưới. <b>Esc</b> để bỏ chọn.</div>
+        <div class="tool" data-tool="wall">🧱 Vẽ tường<span class="kbd">2</span></div>
+        <div class="tool" data-tool="box">📦 Khối hộp thiết bị<span class="kbd">3</span></div>
+        <div class="tool" data-tool="tra">⚡ Máy biến áp<span class="kbd">4</span></div>
+        <div class="tool" data-tool="bin">🧯 Bình chữa cháy<span class="kbd">5</span></div>
+        <div class="tool" data-tool="rail">🛡 Lan can<span class="kbd">6</span></div>
+        <div class="tool" data-tool="stair">🪜 Cầu thang<span class="kbd">7</span></div>
+        <div class="tool" data-tool="roof">🏠 Mái bê tông<span class="kbd">8</span></div>
+        <div class="tool" data-tool="door">🚪 Cửa đi<span class="kbd">9</span></div>
+        <div class="tool" data-tool="exit">🟩 Đèn EXIT<span class="kbd">0</span></div>
+        <div class="tool" data-tool="emg">🔦 Đèn sự cố<span class="kbd">E</span></div>
+        <div class="tool" data-tool="fm200">🛢 Bình khí FM-200<span class="kbd">F</span></div>
+        <div class="tool" data-tool="toma">⚙ Khối tổ máy<span class="kbd">G</span></div>
+        <div class="tool" data-tool="chop">🔺 Chóp cụt bát giác<span class="kbd">P</span></div>
+        <div class="tool" data-tool="beacon">🚨 Đèn quay báo động<span class="kbd">B</span></div>
+        <div class="tool" data-tool="thangbo">🪜 Cầu thang bộ (nhiều vế)<span class="kbd">T</span></div>
+        <div class="tool" data-tool="san">🟦 Vẽ tấm sàn<span class="kbd">N</span></div>
+        <div class="tool" data-tool="catsan">✂ Cắt bỏ sàn dư<span class="kbd">K</span></div>
+        <div class="tool" data-tool="gopmep">🧲 Gộp 2 mép sàn<span class="kbd">J</span></div>
+        <label class="sub" style="display:block;margin:-4px 0 6px 6px">
+          <input type="checkbox" id="dSanTay"> vẽ tay từng điểm (bỏ tick = tự ăn theo bờ tường)</label>
+        <div class="tool" data-tool="lo">🕳 Lỗ thông tầng<span class="kbd">O</span></div>
+        <div class="tool" data-tool="thangmay">🛗 Thang máy<span class="kbd">M</span></div>
+        <div class="tool" data-tool="hong">🚒 Họng nước vách tường<span class="kbd">H</span></div>
+      </div>
+
+      <div class="sec">
+        <h2>Kích thước</h2>
+        <div class="num"><label>Bề dày tường (m)</label><input type="number" id="dThick" value="0.22" step="0.01" min="0.05"></div>
+        <div class="num"><label>Chiều cao tường (m)</label><input type="number" id="dWallH" value="0" step="0.1" min="0"></div>
+        <div class="num"><label>Chiều cao khối (m)</label><input type="number" id="dBoxH" value="2.0" step="0.1" min="0.1"></div>
+        <div class="num"><label>Chiều cao máy biến áp (m)</label><input type="number" id="dTraH" value="3.2" step="0.1" min="1"></div>
+        <div class="num"><label>Chiều cao lan can (m)</label><input type="number" id="dRailH" value="1.1" step="0.05" min="0.3"></div>
+        <div class="num"><label>Bề rộng cầu thang (m)</label><input type="number" id="dStairW" value="1.2" step="0.1" min="0.5"></div>
+        <div class="num"><label>Cao độ chân (m, so với sàn)</label><input type="number" id="dBase" value="0" step="0.1"></div>
+        <div id="dBaseWarn" class="sub" style="display:none;color:#e0b05f;margin:2px 0 6px"></div>
+        <div class="num"><label>Mái bê tông: cao đỉnh (m, 0 = mái bằng)</label><input type="number" id="dRoofH" value="0" step="0.1" min="0"></div>
+        <div class="num"><label>Cao độ lắp đèn EXIT (m)</label><input type="number" id="dExitH" value="2.4" step="0.1" min="0.5"></div>
+        <div class="num"><label>Cao độ lắp đèn sự cố (m)</label><input type="number" id="dEmgH" value="2.6" step="0.1" min="0.5"></div>
+        <div class="num"><label>Chiều cao khối tổ máy (m)</label><input type="number" id="dTomaH" value="3" step="0.1" min="0.2"></div>
+        <div class="num"><label>Chiều cao chóp cụt (m)</label><input type="number" id="dChopH" value="1.5" step="0.1" min="0.15"></div>
+        <div class="num"><label>Mặt trên / đáy chóp cụt</label><input type="number" id="dChopTop" value="0.58" step="0.02" min="0.25" max="0.92"></div>
+        <div class="num"><label>Chiều cao thang máy (m)</label><input type="number" id="dTmayH" value="38.5" step="0.5" min="2"></div>
+        <div class="num"><label>Lỗ thông xuống mấy cao trình</label><input type="number" id="dLoTang" value="1" step="1" min="1" max="12"></div>
+        <div class="num"><label>Chiều cao thang bộ (m)</label><input type="number" id="dThangH" value="3.5" step="0.1" min="0.3"></div>
+        <div class="num"><label>Chiều cao đèn quay (m)</label><input type="number" id="dBeaconH" value="0.18" step="0.02" min="0.06"></div>
+        <div class="num"><label>Chiều cao bình FM-200 (m)</label><input type="number" id="dFmH" value="1.80" step="0.05" min="0.6"></div>
+        <div class="num"><label>Chiều cao cửa (m)</label><input type="number" id="dDoorH" value="2.1" step="0.05" min="1"></div>
+        <div class="num"><label>Loại cửa</label><select id="dDoorKind"><option value="don">Cửa đơn (1 cánh)</option><option value="doi">Cửa đôi (2 cánh)</option><option value="cuon">Cửa cuốn</option></select></div>
+        <div class="num"><label>Cửa mở sang</label><select id="dFlip"><option value="0">Bên trái</option><option value="1">Bên phải</option></select></div>
+        <div class="sub">Chiều cao tường = 0 nghĩa là cao hết tầng; cầu thang cũng dùng ô này,
+        để 0 là thang lên đúng cao trình kế tiếp.</div>
+      </div>
+
+      <div class="sec">
+        <h2>Đối tượng đang chọn</h2>
+        <div id="dsel"><div class="sub">Chưa chọn gì.</div></div>
+      </div>
+
+      <div class="sec">
+        <h2>Đối tượng đã vẽ</h2>
+        <div id="dlist"></div>
+        <div class="btns" style="margin-top:8px">
+          <button id="dDel" class="pri">🗑 Xoá đối tượng đang chọn</button>
+          <button id="dGopSan">🔗 Nối 2 sàn gần nhất</button>
+          <button id="dDonSan">🧹 Dọn mép sàn</button>
+          <button id="dKhit">🔗 Làm khít góc tường</button>
+          <button id="dUndo">↶ Hoàn tác</button>
+          <button id="dFloorDown">⤓ Hạ cao trình này về sàn</button>
+          <button id="dClear">Xoá cao trình này</button>
+        </div>
+      </div>
+
+      <div class="sec">
+        <h2>Lưu / nạp</h2>
+        <div class="btns">
+          <button id="d2d">◳ Mặt bằng 2D</button>
+          <button id="dSave" class="pri">Lưu vào máy</button>
+          <button id="dExport">Xuất JSON</button>
+          <button id="dPull" style="display:none">⤓ Lấy bản đám mây</button>
+          <button id="dHist">⟲ Bản lưu trước</button>
+          <div class="sub" id="cloud" style="width:100%;margin-top:6px">☁ …</div>
+          <div class="sub" id="ver" style="width:100%;margin-top:4px"></div>
+          <button id="dImport">Nạp JSON</button>
+        </div>
+        <input type="file" id="dFile" accept="application/json" style="display:none">
+        <div class="sub" style="margin-top:6px">
+          Bản vẽ thêm được lưu trong trình duyệt (localStorage) và có thể xuất ra tệp
+          <code>thiet-ke.json</code> để chuyển máy khác hoặc gộp vào dữ liệu gốc.
+        </div>
+      </div>
+    </div>
+
+    <div class="scroll" id="paneView">
+      <div class="sec">
+        <h2>Tổng hợp</h2>
+        <div class="stat" id="stats"></div>
+      </div>
+
+      <div class="sec">
+        <h2>Loại bình</h2>
+        <div id="types"></div>
+      </div>
+
+      <div class="sec">
+        <h2>Tìm kiếm</h2>
+        <input type="search" id="q" placeholder="Mã bình, phòng (P601, CT.1)…">
+      </div>
+
+      <div class="sec">
+        <h2>Cao trình / tầng</h2>
+        <div class="btns" style="margin-bottom:8px">
+          <button id="allOn">Hiện tất cả</button>
+          <button id="top">Nhìn từ trên</button>
+        </div>
+        <div id="floors"></div>
+        <div class="sub" style="margin-top:7px">Bấm tên cao trình: chỉ hiện cao trình đó.
+        Biểu tượng 👁 bật/tắt thêm từng cao trình để xem nhiều tầng cùng lúc.</div>
+      </div>
+
+      <div class="sec">
+        <h2>Hiển thị</h2>
+        <label class="lbl">Giãn cách tầng (×<span id="expv">1.0</span>)</label>
+        <input type="range" id="explode" min="1" max="6" step="0.1" value="1.6">
+        <label class="lbl">Kích thước ký hiệu (×<span id="mkv">1.0</span>)</label>
+        <input type="range" id="mksize" min="0.4" max="3" step="0.1" value="1">
+        <label class="lbl">Độ mờ mặt bằng</label>
+        <input type="range" id="opacity" min="0.15" max="1" step="0.05" value="1">
+        <label class="lbl">Độ đậm tường / sàn</label>
+        <input type="range" id="wallop" min="0" max="1" step="0.05" value="0.55">
+        <label style="display:block;margin-top:8px">Cỡ biển EXIT <span id="exitScaleVal" class="sub">2.4×</span></label>
+        <input type="range" id="exitScale" min="1" max="6" step="0.2" value="2.4">
+        <div class="btns" style="margin-top:10px">
+          <button id="massing" class="pri">Tường / sàn</button>
+          <button id="exitBtn" class="pri">Đèn EXIT</button>
+          <button id="cab" class="pri">Tủ, thiết bị</button>
+          <button id="plan2d">Bản vẽ mặt bằng (đang tắt)</button>
+          <button id="paper">Nền giấy trắng</button>
+          <button id="frame" class="pri">Khung bao khối (tab Thiết kế)</button>
+          <button id="walk">🚶 Đi bộ trong cao trình (thoát nạn)</button>
+          <button id="reset" class="pri">Góc nhìn mặc định</button>
+          <button id="csv">Xuất CSV</button>
+        </div>
+      </div>
+
+      <div class="sec">
+        <h2>Hiệu chỉnh tỉ lệ</h2>
+        <label class="lbl">Khoảng cách tim tổ máy M1–M2 (m)</label>
+        <input type="number" id="calib" step="0.1" min="5" max="60">
+        <div class="sub" style="margin-top:6px">
+          Bản vẽ không ghi kích thước nên tỉ lệ mét được suy ra từ khoảng cách này.
+          Nhập số thực tế để mọi khoảng cách hiển thị đúng. Vị trí tương đối của các
+          bình không phụ thuộc giá trị này.
+        </div>
+      </div>
+
+      <div class="sec" id="notes"></div>
+    </div>
+  </aside>
+
+  <main id="view">
+    <button id="burger" title="Hiện bảng điều khiển">☰</button>
+    <div id="tip"></div>
+    <div id="info"><span class="close" id="infoclose">✕</span><div id="infobody"></div></div>
+    <div id="dhint"></div>
+    <div id="hud">Chuột trái: xoay · Chuột phải: di chuyển · Lăn: phóng to · Bấm vào bình để xem chi tiết</div>
+  </main>
+</div>
+
+<script src="./config.js?v=1789510453"></script>
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.js" } }
+</script>
+<script type="module" src="./app.js?v=1789694526"></script>
+<div id="wkHud" style="display:none;position:fixed;left:50%;bottom:26px;transform:translateX(-50%);
+     background:rgba(16,21,28,.88);border:1px solid #2b3540;border-radius:10px;padding:10px 16px;
+     color:#e6edf3;font:13px/1.5 system-ui;z-index:50;text-align:center;min-width:280px"></div>
+<div id="wkTam" style="display:none"></div>
+</body>
+</html>
