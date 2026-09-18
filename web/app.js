@@ -3956,9 +3956,42 @@ function loadStore() {
   } catch (e) { }
 }
 
+// ---------------------------------------------------------------------------
+// KHOA TAB THIET KE: phai nhap dung mat khau moi vao duoc. Mat khau khong nam
+// trong ma nguon, chi luu ban bam SHA-256. Mo duoc roi thi nho trong phien nay.
+// Luu y: day la khoa phia trinh duyet, chi de ngan nguoi xem sua nham; ai biet
+// mo cong cu nha phat trien van qua duoc. Muon chan that thi phai khoa o may chu.
+// ---------------------------------------------------------------------------
+const BAM_THIETKE = 'bbd2fcdcc81d2a30a408f0632495b1000a00a86f904678771074900ba4b80a98';
+let daMoThietKe = false;
+
+async function bamChuoi(t) {
+  const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(t));
+  return [...new Uint8Array(b)].map(x => x.toString(16).padStart(2, '0')).join('');
+}
+
+async function xinMatKhauThietKe() {
+  if (daMoThietKe) return true;
+  try {
+    if (sessionStorage.getItem('ialy.tk') === BAM_THIETKE) { daMoThietKe = true; return true; }
+  } catch (e) { }
+  const mk = prompt('Tab Thiết kế có khoá. Nhập mật khẩu:');
+  if (mk === null) return false;
+  let ok = false;
+  try { ok = (await bamChuoi(mk.trim())) === BAM_THIETKE; } catch (e) { ok = false; }
+  if (!ok) {
+    hint('Sai mật khẩu — không vào được tab Thiết kế');
+    setTimeout(() => hint(''), 2500);
+    return false;
+  }
+  daMoThietKe = true;
+  try { sessionStorage.setItem('ialy.tk', BAM_THIETKE); } catch (e) { }
+  return true;
+}
+
 function initDesign() {
   $('#tabView').onclick = () => setMode('view');
-  $('#tabDesign').onclick = () => setMode('design');
+  $('#tabDesign').onclick = async () => { if (await xinMatKhauThietKe()) setMode('design'); };
   document.querySelectorAll('.tool').forEach(t => { t.onclick = () => setTool(t.dataset.tool); });
   renderer.domElement.addEventListener('pointerdown', designDown);
   renderer.domElement.addEventListener('pointermove', designMove);
