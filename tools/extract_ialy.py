@@ -25,10 +25,12 @@ DPI = 150
 PT_TREN_DON_VI = 220.0
 MET_MOI_DON_VI = 22.0
 
+# Chi binh xach tay va nut an moi la "item" (cham mau tren mat bang).
+# Hong lay nuoc dung nhu ben Ialy mo rong: doi tuong 'hong' -> tu hop ho ap
+# lung vao tuong, xem web/data/ialy/custom.json.
 LOAI = {
     "binhBot":  ("ABC8",  "Bình bột ABC chữa cháy xách tay", "#e23b2e"),
     "binhKhi":  ("CO2",   "Bình CO₂ chữa cháy xách tay", "#2f74d0"),
-    "hongNuoc": ("HONG",  "Họng lấy nước chữa cháy",     "#d4462f"),
     "nutBao":   ("NUTBAO", "Nút ấn báo cháy",            "#e0a030"),
 }
 
@@ -115,6 +117,7 @@ def main():
     print("42 trang -> %d khu vuc" % len(dung))
 
     floors, items, exits = [], [], []
+    custom = {}
     stt = 0
     for k, idx in enumerate(dung):
         a = tho[idx]
@@ -146,13 +149,23 @@ def main():
             "walls": [], "doors": [], "cabinets": [],
         })
 
-        for loai in ("binhBot", "binhKhi", "hongNuoc", "nutBao"):
+        for loai in ("binhBot", "binhKhi", "nutBao"):
             for q in kq[loai]:
                 stt += 1
                 x, y = uv(q)
                 items.append({"id": "IA-%s-%03d" % (ma, stt), "floor": k,
                               "type": LOAI[loai][0], "bx": x, "by": y,
                               "room": None})
+        # hong lay nuoc -> doi tuong 'hong' nhu ben Ialy mo rong
+        ds = []
+        for n, q in enumerate(kq["hongNuoc"]):
+            x, y = uv(q)
+            ds.append({"type": "hong", "id": "hg%02d%02d" % (k, n + 1),
+                       "u0": x, "v0": y, "u1": x, "v1": y,
+                       "h": 0, "base": 0,
+                       "name": "Họng nước vách tường %d" % (n + 1)})
+        if ds:
+            custom[str(k)] = ds
         for n, q in enumerate(kq["denExit"]):
             x, y = uv(q)
             exits.append({"id": "IAEX-%02d-%02d" % (k, n + 1), "floor": k,
@@ -177,8 +190,14 @@ def main():
               ensure_ascii=False)
     json.dump({"walls": {}}, open(os.path.join(OUT, "lines.json"), "w", encoding="utf-8"),
               ensure_ascii=False)
+    # Ban ve khoi tao: nap khi nguoi dung chua ve gi cho nha may nay.
+    json.dump({"custom": custom, "edits": {}},
+              open(os.path.join(OUT, "custom.json"), "w", encoding="utf-8"),
+              ensure_ascii=False)
 
-    print("khu vuc:", len(floors), " thiet bi:", len(items), " den EXIT:", len(exits))
+    nHong = sum(len(v) for v in custom.values())
+    print("khu vuc:", len(floors), " thiet bi:", len(items),
+          " hong nuoc:", nHong, " den EXIT:", len(exits))
     for f in floors:
         n = sum(1 for it in items if it["floor"] == f["page"])
         print("  %-22s EL %6.1f  %3d thiet bi  %s" % (f["name"], f["elevation"], n, f["image"]))

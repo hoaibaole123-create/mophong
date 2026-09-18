@@ -326,12 +326,14 @@ function makeMarker(type, mat) {
     g.add(m1, m2);
     g.userData.abc = [m1, m2];                   // đổi vật liệu khi chọn / khi lọc
     g.userData.vl = V;
-  } else if (type === 'CO25') {
+  } else if (type === 'CO25' || type === 'CO2') {   // nha may Ialy dung chung mo hinh binh CO2
     const G = geoCO2(), V = vlCO2();
     const m1 = new THREE.Mesh(G.do, V.do), m2 = new THREE.Mesh(G.den, V.den);
     g.add(m1, m2);
     g.userData.abc = [m1, m2];                   // dùng chung cơ chế đổi vật liệu
     g.userData.vl = V;
+  } else if (type === 'NUTBAO') {
+    g.add(makeNutBao());
   } else {
     const body = new THREE.Mesh(GEO.bodyCO2, mat);
     const neck = new THREE.Mesh(GEO.neckCO2, mat);
@@ -340,6 +342,71 @@ function makeMarker(type, mat) {
     g.add(body, neck);
   }
   g.userData.mat = mat;
+  return g;
+}
+
+// ---- NUT AN BAO CHAY kieu PPE-1 (JE): mat chuong tron do, chu FIRE ALARM,
+// nut PUSH den o giua, den bao nho phia duoi. Treo o do cao 1,4 m.
+let _matNutBao = null;
+function vlNutBao() {
+  if (_matNutBao) return _matNutBao;
+  const c = document.createElement('canvas');
+  c.width = c.height = 256;
+  const x = c.getContext('2d');
+  x.fillStyle = '#cc1f18'; x.fillRect(0, 0, 256, 256);        // nền đỏ
+  x.strokeStyle = '#8d130e'; x.lineWidth = 6;
+  x.beginPath(); x.arc(128, 128, 120, 0, Math.PI * 2); x.stroke();
+  x.fillStyle = '#ffffff';
+  x.font = 'bold 30px Arial, sans-serif'; x.textAlign = 'center';
+  x.fillText('FIRE ALARM', 128, 74);
+  x.font = '13px Arial, sans-serif';
+  x.fillText('TELEPHONE', 128, 92);
+  x.fillStyle = '#14181c';                                    // hốc nút bấm
+  x.beginPath(); x.arc(128, 150, 46, 0, Math.PI * 2); x.fill();
+  x.fillStyle = '#2f7d3a';
+  x.beginPath(); x.arc(128, 150, 34, 0, Math.PI * 2); x.fill();
+  x.fillStyle = '#ffffff'; x.font = 'bold 22px Arial, sans-serif';
+  x.fillText('PUSH', 128, 158);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  _matNutBao = {
+    mat: new THREE.MeshStandardMaterial({ map: t, roughness: .5, metalness: .05 }),
+    vo: new THREE.MeshStandardMaterial({ color: 0xbb1b14, roughness: .45, metalness: .1 }),
+    nut: new THREE.MeshStandardMaterial({ color: 0x2f7d3a, roughness: .35,
+                                          emissive: 0x0d2a12 }),
+    den: new THREE.MeshStandardMaterial({ color: 0xff5a3c, emissive: 0xc02a10,
+                                          roughness: .3 })
+  };
+  return _matNutBao;
+}
+
+// Nut bao gan tuong: quay mat ra phia phong, ap lung vao tuong gan nhat.
+// Chua ve tuong thi de mac dinh huong +Z.
+function xoayNutBao(g, f, x, z) {
+  if (typeof tuongGanNhat !== 'function') return;
+  const t = tuongGanNhat(f, x, z);
+  if (!t || t.d > 4) return;
+  const nx = -t.uz, nz = t.ux;
+  const ben = ((x - t.x) * nx + (z - t.z) * nz) >= 0 ? 1 : -1;
+  g.position.x = t.x + nx * ben * (t.day / 2 + .05);
+  g.position.z = t.z + nz * ben * (t.day / 2 + .05);
+  g.rotation.y = -Math.atan2(t.uz, t.ux) + (ben < 0 ? Math.PI : 0);
+}
+
+function makeNutBao() {
+  const V = vlNutBao();
+  const g = new THREE.Group();
+  const R = .11;                                   // hộp tròn đường kính 22 cm
+  const than = new THREE.Mesh(new THREE.CylinderGeometry(R, R * .82, .07, 24), V.vo);
+  than.rotation.x = Math.PI / 2;
+  const mat = new THREE.Mesh(new THREE.CircleGeometry(R, 24), V.mat);
+  mat.position.z = .036;
+  const nut = new THREE.Mesh(new THREE.CylinderGeometry(.028, .028, .018, 16), V.nut);
+  nut.rotation.x = Math.PI / 2; nut.position.set(0, -.012, .045);
+  const den = new THREE.Mesh(new THREE.SphereGeometry(.012, 10, 8), V.den);
+  den.position.set(0, -.072, .042);
+  g.add(than, mat, nut, den);
+  g.position.y = 1.4;                              // treo cao 1,4 m như thực tế
   return g;
 }
 
@@ -1658,6 +1725,7 @@ function buildScene() {
       emissive: col.clone().multiplyScalar(.25) });
     const g = makeMarker(it.type, mat);
     g.position.set(x, floorY(f) + .05, z);
+    if (it.type === 'NUTBAO') xoayNutBao(g, f, x, z);
     g.userData.item = it;
     g.userData.mat = mat;
     markerGroup.add(g); markers.push(g);
@@ -1741,6 +1809,7 @@ function relayout() {
     const doi = editsOf(f.page).movItem[it.id];
     const [x, z] = worldXZ(f, doi ? doi[0] : it.bx, doi ? doi[1] : it.by);
     m.position.set(x, floorY(f) + .05, z);
+    if (it.type === 'NUTBAO') xoayNutBao(m, f, x, z);
   }
   masses.forEach(m => { m.traverse(o => o.geometry && o.geometry.dispose()); massGroup.remove(m); });
   masses = []; pickables = []; pickRects = [];
@@ -4233,7 +4302,9 @@ function initDesign() {
     const src = document.querySelector('script[src*="app.js"]');
     v.textContent = 'Bản dựng: ' + ((src && src.src.split('v=')[1]) || '?') + ' (ialy.build)';
   }
-  cloud.khoi();
+  // Ban ve khoi tao phai nap XONG truoc khi noi dam may. Neu khong, cloud.keo()
+  // thay ban do trong se day ban rong len va keo ve -> mat sach 80 hong nuoc.
+  (window.__banVeGoc || Promise.resolve()).then(() => cloud.khoi());
   rebuildCustom();
 }
 
@@ -4593,6 +4664,22 @@ fetch(duongDL('plant.json?v=') + Date.now()).then(r => r.json()).then(d => {
     .catch(() => { state.exitData = { items: [] }; });
   renderSidebar();
   loadStore();
+  // Ban ve khoi tao cua nha may (neu co): chi nap khi nguoi dung chua ve gi va
+  // dam may cung chua co — de khong de len viec dang lam.
+  // Dem SO VAT, khong dem so trang: customOf() tu tao mang rong cho moi trang
+  // nen Object.keys(...) luon > 0 va ban ve khoi tao se khong bao gio nap.
+  const soVat = o => Object.values(o || {}).reduce((a, b) => a + (b ? b.length : 0), 0);
+  window.__banVeGoc = soVat(state.custom) ? Promise.resolve()
+    : fetch(duongDL('custom.json?v=') + Date.now())
+        .then(r => r.ok ? r.json() : null)
+        .then(j => {
+          if (!j || !j.custom || soVat(state.custom)) return;
+          state.custom = j.custom; state.edits = j.edits || {};
+          luuCucBo();
+          if (typeof rebuildCustom === 'function') rebuildCustom();
+          renderSidebarCounts();
+        })
+        .catch(() => { });
   buildScene();
   initDesign();
   resize();
