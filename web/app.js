@@ -360,6 +360,12 @@ const CAB_H = 2.0;           // chiều cao tủ / thiết bị (m)
 
 
 // ---- sửa đổi do người dùng thực hiện trên các đối tượng bóc từ bản vẽ
+// Toa do binh: uu tien vi tri nguoi dung da doi tay, khong co thi lay ban goc.
+function viTriBinh(it) {
+  const doi = editsOf(floorOf(it.floor).page).movItem[it.id];
+  return doi ? doi : [it.bx, it.by];
+}
+
 function editsOf(page) {
   if (!state.edits[page]) state.edits[page] = {};
   const e = state.edits[page];
@@ -369,6 +375,8 @@ function editsOf(page) {
   e.delItem = e.delItem || [];      // bình chữa cháy bóc từ bản vẽ (theo mã bình)
   e.delExit = e.delExit || [];      // đèn EXIT bóc từ bản vẽ đã xoá
   e.movExit = e.movExit || {};      // đèn EXIT đã dời: mã đèn -> [bx, by]
+  e.movItem = e.movItem || {};      // bình chữa cháy đã dời: mã bình -> [bx, by]
+  e.matExit = e.matExit || {};      // đèn EXIT đặt mặt nào của cửa: mã đèn -> 1 (trước) / -1 (sau)
   return e;
 }
 
@@ -1558,6 +1566,16 @@ function buildExits() {
       y = floorY(f) + Math.min(cua.cao + 0.28 * state.explode, storey - 0.3);
       hai = matTuongCuaBien(f, wx, wz);         // treo ra hai mặt tường cho khỏi bị che
     }
+    // NGƯỜI DÙNG CHỌN MẶT: đặt hẳn ra trước hoặc sau cửa, không để máy tự lật nữa.
+    const mat = ed.matExit[it.id];
+    if (mat && cua) {
+      const nx = Math.sin(goc), nz = Math.cos(goc);
+      const lui = 0.16 * state.explode;
+      x += nx * mat * lui; z += nz * mat * lui;
+      if (mat < 0) goc += Math.PI;
+      hai = null;
+      g.userData.matTay = true;                // đã chọn tay -> chinhBienExit bỏ qua
+    }
     g.position.set(x + (hai ? hai.nx * hai.lech : 0), y, z + (hai ? hai.nz * hai.lech : 0));
     g.rotation.y = goc;
     g.scale.setScalar(state.exitScale);
@@ -1609,7 +1627,8 @@ function buildScene() {
 
   for (const it of state.data.items) {
     const f = floorOf(it.floor);
-    const [x, z] = worldXZ(f, it.bx, it.by);
+    const doi = editsOf(f.page).movItem[it.id];        // bình đã được dời tay
+    const [x, z] = worldXZ(f, doi ? doi[0] : it.bx, doi ? doi[1] : it.by);
     const col = new THREE.Color(state.data.types[it.type].color);
     const mat = new THREE.MeshStandardMaterial({ color: col, roughness: .45, metalness: .15,
       emissive: col.clone().multiplyScalar(.25) });
@@ -1695,7 +1714,8 @@ function relayout() {
   });
   for (const m of markers) {
     const it = m.userData.item, f = floorOf(it.floor);
-    const [x, z] = worldXZ(f, it.bx, it.by);
+    const doi = editsOf(f.page).movItem[it.id];
+    const [x, z] = worldXZ(f, doi ? doi[0] : it.bx, doi ? doi[1] : it.by);
     m.position.set(x, floorY(f) + .05, z);
   }
   masses.forEach(m => { m.traverse(o => o.geometry && o.geometry.dispose()); massGroup.remove(m); });
@@ -2362,6 +2382,23 @@ function renderEditPanel() {
     const bc = el('button', '', '⤒ Gắn lên cửa gần nhất');
     bc.onclick = () => ganDenLenCua();
     btns.appendChild(bc);
+  }
+  if (p[0] === 'x') {                         // đèn EXIT bóc từ bản vẽ: chọn mặt treo
+    const id = p.slice(2).join(':'), ed = editsOf(+p[1]);
+    const nay = ed.matExit[id] || 0;
+    const datMat = v => {
+      chup();
+      if (v === 0) delete ed.matExit[id]; else ed.matExit[id] = v;
+      saveEdits(); buildExits(); renderEditPanel();
+      hint(v === 0 ? 'Đèn EXIT: để máy tự chọn mặt'
+        : 'Đèn EXIT đặt ' + (v > 0 ? 'PHÍA TRƯỚC' : 'PHÍA SAU') + ' cửa');
+      setTimeout(() => hint(''), 2200);
+    };
+    const b1 = el('button', nay > 0 ? 'pri' : '', '◀ Trước cửa');
+    const b2 = el('button', nay < 0 ? 'pri' : '', 'Sau cửa ▶');
+    const b0 = el('button', nay === 0 ? 'pri' : '', '⟲ Tự động');
+    b1.onclick = () => datMat(1); b2.onclick = () => datMat(-1); b0.onclick = () => datMat(0);
+    btns.appendChild(b1); btns.appendChild(b2); btns.appendChild(b0);
   }
   if (state.sel.slice(0, 2) === 'c:' && (selectedObj() || {}).base) {
     const hz = el('button', '', '⤓ Hạ về sàn');
@@ -3556,6 +3593,7 @@ function designDown(ev) {
         selectKey(nho.k, nho.o);
         if (nho.k.slice(0, 2) === 'c:') startMove(ev, nho.k.slice(2));
         else if (nho.k.slice(0, 2) === 'x:') startMoveExit(ev, nho.k);
+        else if (nho.k.slice(0, 2) === 'm:') startMoveItem(ev, nho.k);
         return;
       }
     }
@@ -3663,7 +3701,7 @@ function designDown(ev) {
 }
 
 // ---- di chuyển đối tượng tự vẽ bằng cách kéo chuột
-const mv = { on: false, id: null, obj: null, x0: 0, z0: 0, goc: null, den: null };
+const mv = { on: false, id: null, obj: null, x0: 0, z0: 0, goc: null, den: null, binh: null };
 function startMove(ev, id) {
   const o = selectedObj(); if (!o) return;
   const p = pickOnFloor(ev); if (!p) return;
@@ -3689,7 +3727,36 @@ function startMoveExit(ev, key) {
   hint('Kéo để dời đèn EXIT — thả chuột để chốt');
 }
 
+// Dời bình chữa cháy bóc từ bản vẽ: y hệt đèn EXIT, ghi vào edits, gốc không đổi.
+function startMoveItem(ev, key) {
+  const p = pickOnFloor(ev); if (!p) return;
+  const pr = key.split(':'), page = +pr[1], id = pr.slice(2).join(':');
+  const it = (state.data.items || []).find(x => x.id === id && floorOf(x.floor).page === page);
+  if (!it) return;
+  const ed = editsOf(page), cu = ed.movItem[id] || [it.bx, it.by];
+  chup();
+  mv.on = true; mv.id = ev.pointerId; mv.obj = null; mv.x0 = p.x; mv.z0 = p.z;
+  mv.binh = { page: page, id: id, goc: [cu[0], cu[1]] };
+  controls.enabled = false;
+  hint('Kéo để dời bình chữa cháy — thả chuột để chốt');
+}
+
 function doMove(ev) {
+  if (mv.binh) {
+    const f = floorOf(mv.binh.page);
+    const p = pickOnFloor(ev); if (!p) return;
+    const a = baseFromWorld(f, mv.x0, mv.z0), b = baseFromWorld(f, p.x, p.z);
+    const ed = editsOf(mv.binh.page);
+    ed.movItem[mv.binh.id] = [round2(mv.binh.goc[0] + b[0] - a[0]),
+                              round2(mv.binh.goc[1] + b[1] - a[1])];
+    const mk = markers.find(m => m.userData.item && m.userData.item.id === mv.binh.id);
+    if (mk) {
+      const q = ed.movItem[mv.binh.id];
+      const [nx, nz] = worldXZ(f, q[0], q[1]);
+      mk.position.x = nx; mk.position.z = nz;
+    }
+    return;
+  }
   if (mv.den) {
     const f = floorOf(mv.den.page);
     const p = pickOnFloor(ev); if (!p) return;
@@ -3796,9 +3863,10 @@ function designMove(ev) {
 function designUp(ev) {
   if (state.mode !== 'design') return;
   if (mv.on) {
-    const laDen = !!mv.den;
-    mv.on = false; mv.obj = null; mv.den = null; controls.enabled = true;
-    if (laDen) { saveEdits(); buildExits(); }
+    const laDen = !!mv.den, laBinh = !!mv.binh;
+    mv.on = false; mv.obj = null; mv.den = null; mv.binh = null; controls.enabled = true;
+    if (laBinh) { saveEdits(); banDoiChua(true); }
+    else if (laDen) { saveEdits(); buildExits(); }
     else { saveCustom(); rebuildCustom(); }
     hint('');
     return;
@@ -4289,8 +4357,8 @@ function showInfo(it) {
   const f = floorOf(it.floor), t = state.data.types[it.type];
   const s = mpp();
   const pos = f.georef === 'standalone'
-    ? `X ${it.bx.toFixed(1)} m · Y ${it.by.toFixed(1)} m (gốc: giữa nhà van)`
-    : `X ${(it.bx * s).toFixed(1)} m · Y ${(it.by * s).toFixed(1)} m (gốc: giữa tim M1–M2)`;
+    ? `X ${viTriBinh(it)[0].toFixed(1)} m · Y ${viTriBinh(it)[1].toFixed(1)} m (gốc: giữa nhà van)`
+    : `X ${(viTriBinh(it)[0] * s).toFixed(1)} m · Y ${(viTriBinh(it)[1] * s).toFixed(1)} m (gốc: giữa tim M1–M2)`;
   $('#infobody').innerHTML = `
     <h3><span class="dot" style="background:${t.color};display:inline-block"></span> ${it.id}</h3>
     <div class="k">Loại</div><div class="v">${t.label}</div>
@@ -4391,7 +4459,7 @@ $('#csv').onclick = () => {
     const f = floorOf(it.floor);
     const k = f.georef === 'standalone' ? 1 : s;
     rows.push([it.id, state.data.types[it.type].label, f.elevation.toFixed(2), f.name,
-      it.room || '', (it.bx * k).toFixed(2), (it.by * k).toFixed(2), f.page + 1]);
+      it.room || '', (viTriBinh(it)[0] * k).toFixed(2), (viTriBinh(it)[1] * k).toFixed(2), f.page + 1]);
   }
   const csv = '﻿' + rows.map(r => r.map(v => `"${v}"`).join(',')).join('\n');
   const a = document.createElement('a');
@@ -4966,6 +5034,7 @@ function chinhBienExit(f) {
     return rc.intersectObject(wkTuong, true).length + rc.intersectObject(massGroup, true).length;
   };
   for (const g of nhom) {
+    if (g.userData.matTay) continue;          // người dùng đã tự chọn mặt -> giữ nguyên
     if (!bi(g)) continue;
     const h = new THREE.Vector3(Math.sin(g.rotation.y), 0, Math.cos(g.rotation.y));
     const p0 = g.position.clone(), goc0 = g.rotation.y;
