@@ -4650,9 +4650,13 @@ function matBang(bat) {
     if (!state.truocPlan) {                    // nhớ cài đặt hiển thị của người dùng
       state.truocPlan = {
         visible: [...state.visible], opacity: state.opacity,
-        wallop: +$('#wallop').value
+        wallop: +$('#wallop').value,
+        mauTuong: matWallShared.color.getHex()
       };
     }
+    // Tường vốn màu be xám, nằm trên nền BẢN VẼ TRẮNG thì gần như mất hút.
+    // Vào mặt bằng 2D thì đổi sang xanh đậm cho nổi rõ trên nền trắng.
+    matWallShared.color.setHex(0x1f4f9c);
     const m = floorMeshes.find(x => x.userData.floor.page === f.page);
     const hop = m ? new THREE.Box3().setFromObject(m) : null;
     const c = hop ? hop.getCenter(new THREE.Vector3()) : new THREE.Vector3(0, floorY(f), 0);
@@ -4680,7 +4684,10 @@ function matBang(bat) {
       if (bp) { bp.classList.add('pri'); bp.textContent = 'Bản vẽ mặt bằng'; }
     }
     if (state.showPlan) { state.opacity = 1; $('#opacity').value = 1; }
-    if ($('#wallop').value > 0.35) { $('#wallop').value = 0.3; matWallShared.opacity = 0.3; }
+    const dam = 0.75;                          // du dam de thay ro tren nen trang
+    $('#wallop').value = dam;
+    matWallShared.opacity = dam; matWallShared.visible = true;
+    matSlab.opacity = Math.min(1, dam * .42);
     applyVisibility(); renderSidebar();
   } else {
     camera = camPersp;
@@ -4692,6 +4699,7 @@ function matBang(bat) {
       state.visible = new Set(t.visible);
       state.opacity = t.opacity; $('#opacity').value = t.opacity;
       $('#wallop').value = t.wallop;
+      if (t.mauTuong !== undefined) matWallShared.color.setHex(t.mauTuong);
       matWallShared.opacity = t.wallop; matSlab.opacity = Math.min(1, t.wallop * .42);
       matWallShared.visible = t.wallop > 0.02; matSlab.visible = t.wallop > 0.02;
       state.truocPlan = null;
