@@ -2248,6 +2248,12 @@ function rebuildCustom() {
       }
       if (mesh.isGroup) mesh = gopNhom(mesh);     // gộp để giảm số lệnh vẽ
       mesh.userData.obj = o;
+      // Ở MẶT BẰNG 2D phải vẽ SAU tấm ảnh bản vẽ. Vật liệu tường đặt
+      // depthWrite = false (cho khỏi vỡ mặt khi mờ), nên nó không ghi chiều sâu;
+      // tấm ảnh bản vẽ có renderOrder = 1, vẽ sau, phủ luôn lên tường -> vẽ
+      // tường ra mà màn hình không thấy gì. Cho vật tự vẽ renderOrder = 3.
+      mesh.renderOrder = state.plan ? 3 : 0;
+      mesh.traverse(q => { if (q.isMesh) q.renderOrder = mesh.renderOrder; });
       customGroup.add(mesh);
       customMeshes.push(mesh);
     }
