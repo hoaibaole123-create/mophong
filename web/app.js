@@ -90,6 +90,30 @@ let floorMeshes = [], markers = [], labels = [], backs = [], masses = [], pickab
 let pickRects = [];
 
 // ---------------------------------------------------------------- helpers
+// ---------------------------------------------------------------------------
+// HAI NHA MAY trong cung mot ung dung. Moi nha may co thu muc du lieu rieng,
+// kho localStorage rieng va ban ve dam may rieng -> sua ben nay khong dung ben kia.
+// ---------------------------------------------------------------------------
+const NHA_MAY = {
+  mr: { ten: 'Ialy mở rộng', duong: './data/', kho: 'ialy', doc: 'ialy-mo-rong',
+        mo: 'Nhà máy thuỷ điện Ialy mở rộng (2×180MW) — bình chữa cháy xách tay' },
+  nm: { ten: 'Nhà máy Ialy', duong: './data/ialy/', kho: 'ialy.nm', doc: 'ialy-nha-may',
+        mo: 'Nhà máy thuỷ điện Ialy — sơ đồ thoát nạn & phương tiện PCCC&CNCH' }
+};
+const nhaMayDang = (() => {
+  try { return localStorage.getItem('ialy.nhamay') === 'nm' ? 'nm' : 'mr'; }
+  catch (e) { return 'mr'; }
+})();
+const NM = NHA_MAY[nhaMayDang];
+const duongDL = t => NM.duong + t;              // ./data/… hoac ./data/ialy/…
+const khoaKho = t => NM.kho + '.' + t;          // ialy.custom hoac ialy.nm.custom
+
+function doiNhaMay(ma) {
+  if (ma === nhaMayDang) return;
+  try { localStorage.setItem('ialy.nhamay', ma); } catch (e) { }
+  location.reload();
+}
+
 const mpp = () => state.unitM / state.data.base_unit_spacing_pt;   // mét / đơn vị bản vẽ gốc
 
 function floorOf(page) { return state.data.floors.find(f => f.page === page); }
@@ -618,7 +642,7 @@ function mucCuaTang(f) {
     hint('Đã nạp nét bản vẽ của ' + f.name + ' — bấm vào giữa phòng để tạo sàn');
     setTimeout(() => hint(''), 2500);
   };
-  img.src = './data/floors/' + f.image;
+  img.src = duongDL('floors/') + f.image;
   return null;
 }
 
@@ -1597,7 +1621,7 @@ function buildScene() {
     const [wx0, wz0] = worldXZ(f, x0, y0);
     const [wx1, wz1] = worldXZ(f, x1, y1);
     const w = Math.abs(wx1 - wx0), h = Math.abs(wz1 - wz0);
-    const tex = loader.load(`./data/floors/${f.image}`);
+    const tex = loader.load(duongDL('floors/') + f.image);
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
     const mesh = new THREE.Mesh(
@@ -2221,8 +2245,8 @@ function removeObj(id) {
 // còn đẩy lên đám mây thì CHỈ khi bấm nút "Lưu".
 function luuCucBo() {
   try {
-    localStorage.setItem('ialy.custom', JSON.stringify(state.custom));
-    localStorage.setItem('ialy.edits', JSON.stringify(state.edits));
+    localStorage.setItem(khoaKho('custom'), JSON.stringify(state.custom));
+    localStorage.setItem(khoaKho('edits'), JSON.stringify(state.edits));
   } catch (e) { }
 }
 
@@ -2546,7 +2570,9 @@ const cloud = {
   khoi() {
     const c = window.IALY_CLOUD;
     if (!c || !c.url || !c.key) { this.trangThai('Chỉ lưu trong trình duyệt này'); return; }
-    this.cfg = c; this.san = true;
+    // Mỗi nhà máy một bản vẽ riêng trên đám mây.
+    this.cfg = Object.assign({}, c, { doc: NM.doc });
+    this.san = true;
     this.keo(true);
     setInterval(() => this.keo(false), 15000);   // 15 giây lấy thay đổi của người khác
   },
@@ -2598,8 +2624,8 @@ const cloud = {
       state.custom = d.custom || {};
       state.edits = d.edits || {};
       try {
-        localStorage.setItem('ialy.custom', JSON.stringify(state.custom));
-        localStorage.setItem('ialy.edits', JSON.stringify(state.edits));
+        localStorage.setItem(khoaKho('custom'), JSON.stringify(state.custom));
+        localStorage.setItem(khoaKho('edits'), JSON.stringify(state.edits));
       } catch (e) { }
       // Luôn dựng lại: lần kéo đầu tiên chạy bất đồng bộ nên xong SAU khi cảnh đã dựng,
       // không dựng lại thì dữ liệu tải về không hiện lên.
@@ -4017,9 +4043,9 @@ function setMode(m) {
 // Phai goi TRUOC buildScene(): neu khong, cac tuong/tu da xoa se hien lai sau khi tai lai trang.
 function loadStore() {
   try {
-    const raw = localStorage.getItem('ialy.custom');
+    const raw = localStorage.getItem(khoaKho('custom'));
     if (raw) state.custom = JSON.parse(raw) || {};
-    const raw2 = localStorage.getItem('ialy.edits');
+    const raw2 = localStorage.getItem(khoaKho('edits'));
     if (raw2) state.edits = JSON.parse(raw2) || {};
   } catch (e) { }
 }
@@ -4058,6 +4084,18 @@ async function xinMatKhauThietKe() {
 }
 
 function initDesign() {
+  const bMR = $('#nmMR'), bNM = $('#nmNM');
+  if (bMR && bNM) {
+    bMR.classList.toggle('on', nhaMayDang === 'mr');
+    bNM.classList.toggle('on', nhaMayDang === 'nm');
+    bMR.onclick = () => doiNhaMay('mr');
+    bNM.onclick = () => doiNhaMay('nm');
+  }
+  const h1 = document.querySelector('#side header h1');
+  if (h1) h1.firstChild.nodeValue = 'Bình chữa cháy — ' + NM.ten + ' ';
+  const sub = $('#hdrsub');
+  if (sub && !sub.textContent.trim()) sub.textContent = NM.mo;
+  document.title = NM.ten + ' — phương tiện PCCC';
   $('#tabView').onclick = () => setMode('view');
   $('#tabDesign').onclick = async () => { if (await xinMatKhauThietKe()) setMode('design'); };
   document.querySelectorAll('.tool').forEach(t => { t.onclick = () => setTool(t.dataset.tool); });
@@ -4180,7 +4218,7 @@ function initDesign() {
   // chỉ đọc lúc mở. Không nghe sự kiện này thì hai tab sẽ hiện hai bản vẽ khác nhau
   // và tab lưu sau ghi đè tab lưu trước.
   addEventListener('storage', e => {
-    if (e.key !== 'ialy.custom' && e.key !== 'ialy.edits') return;
+    if (e.key !== khoaKho('custom') && e.key !== khoaKho('edits')) return;
     if (coThayDoi) return;                  // tab này đang có thay đổi chưa lưu -> giữ nguyên
     loadStore();
     rebuildMasses(); rebuildCustom(); buildExits();
@@ -4403,7 +4441,7 @@ $('#mksize').oninput = e => { state.mkScale = +e.target.value; $('#mkv').textCon
 $('#opacity').oninput = e => { state.opacity = +e.target.value; applyVisibility(); };
 $('#calib').onchange = e => {
   state.unitM = Math.max(5, +e.target.value || 22);
-  localStorage.setItem('ialy.unitM', state.unitM);
+  localStorage.setItem(khoaKho('unitM'), state.unitM);
   relayout();
 };
 $('#allOn').onclick = () => { state.visible = new Set(state.data.floors.map(f => f.page)); syncFloorRows(); applyVisibility(); fitAll(); };
@@ -4421,7 +4459,7 @@ $('#plan2d').onclick = e => {
   state.showPlan = !state.showPlan;
   e.target.classList.toggle('pri', state.showPlan);
   e.target.textContent = state.showPlan ? 'Bản vẽ mặt bằng' : 'Bản vẽ mặt bằng (đang tắt)';
-  try { localStorage.setItem('ialy.showPlan', state.showPlan ? '1' : '0'); } catch (err) { }
+  try { localStorage.setItem(khoaKho('showPlan'), state.showPlan ? '1' : '0'); } catch (err) { }
   applyVisibility();
 };
 $('#exitScale').oninput = e => {
@@ -4536,21 +4574,21 @@ function matBang(bat) {
 addEventListener('resize', resize);
 
 // ---------------------------------------------------------------- start
-fetch('./data/plant.json?v=' + Date.now()).then(r => r.json()).then(d => {
+fetch(duongDL('plant.json?v=') + Date.now()).then(r => r.json()).then(d => {
   state.data = d;
-  state.unitM = +(localStorage.getItem('ialy.unitM') || d.default_unit_spacing_m);
-  state.showPlan = localStorage.getItem('ialy.showPlan') === '1';   // mặc định tắt
+  state.unitM = +(localStorage.getItem(khoaKho('unitM')) || d.default_unit_spacing_m);
+  state.showPlan = localStorage.getItem(khoaKho('showPlan')) === '1';   // mặc định tắt
   $('#calib').value = state.unitM;
   state.visible = new Set(d.floors.map(f => f.page));
   state.typeOn = new Set(Object.keys(d.types));
-  fetch('./data/lines.json?v=' + Date.now())
+  fetch(duongDL('lines.json?v=') + Date.now())
     .then(r => r.ok ? r.json() : { walls: {} })
     .then(l => {
       state.lines = l.walls || {};
       if (typeof rebuildMasses === 'function') { /* chỉ dùng cho chế độ đi bộ */ }
     })
     .catch(() => { state.lines = {}; });
-  fetch('./data/exit.json?v=' + Date.now()).then(r => r.ok ? r.json() : { items: [] })
+  fetch(duongDL('exit.json?v=') + Date.now()).then(r => r.ok ? r.json() : { items: [] })
     .then(e => { state.exitData = e; buildExits(); renderSidebarCounts(); })
     .catch(() => { state.exitData = { items: [] }; });
   renderSidebar();
