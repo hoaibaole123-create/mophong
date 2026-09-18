@@ -307,6 +307,9 @@ function vlCO2() {
   return _vlCO2;
 }
 
+const TEN_BINH = { ABC8: 'Bình bột ABC 8kg', CO25: 'Bình CO₂ 5kg',
+                   CO224: 'Bình CO₂ 24kg xe đẩy', FM200: 'Bình FM200' };
+
 function makeMarker(type, mat) {
   const g = new THREE.Group();
   if (type === 'CO224') {                       // xe đẩy: bình lớn + 2 bánh + tay kéo
@@ -2117,7 +2120,9 @@ function rebuildCustom() {
         mesh.position.set(ax, y, az);
         mesh.rotation.y = (o.rot || 0);
       } else if (o.type === 'bin') {
-        mesh = makeMarker('ABC8', MAT_BINH_THEM);   // dùng chung một vật liệu
+        // Moi loai binh mot mo hinh rieng, dung chung voi binh boc tu ban ve.
+        const lb = o.binh || 'ABC8';
+        mesh = makeMarker(lb, lb === 'CO224' ? MAT_BINH_CO224 : MAT_BINH_THEM);
         mesh.position.set(ax, y + .05, az);
         mesh.scale.setScalar(state.mkScale * (state.sel === 'c:' + o.id ? 1.8 : 1));
       } else {
@@ -2337,6 +2342,8 @@ function saveCustom() {
 // (w:trang:chỉ_số = tường, b:trang:chỉ_số = tủ/thiết bị)
 let selHighlight = null;
 const MAT_BINH_THEM = new THREE.MeshStandardMaterial({ color: 0xe23b2e, roughness: .45, emissive: 0x3a0a06 });
+// binh CO2 24kg xe day: mau xanh nhu ben ban ve goc, cho de phan biet
+const MAT_BINH_CO224 = new THREE.MeshStandardMaterial({ color: 0x1f9d6b, roughness: .45, emissive: 0x08251a });
 const MAT_HL = new THREE.MeshBasicMaterial({ color: 0xffc14d, transparent: true, opacity: .55,
   depthTest: false });
 
@@ -3783,8 +3790,16 @@ function designDown(ev) {
   }
   if (state.tool === 'bin') {
     const uv = baseFromWorld(p.f, p.x, p.z);
+    const loai = (($('#dBinhLoai') || {}).value) || 'ABC8';
+    if (loai === 'FM200') {                     // FM-200 la khoi binh lon rieng
+      const n = customOf(p.f.page).filter(o => o.type === 'fm200').length + 1;
+      addObj(p.f, { type: 'fm200', u0: uv[0], v0: uv[1], u1: uv[0], v1: uv[1],
+                    h: +($('#dFmH') || {}).value || 1.80, name: 'Bình FM200 ' + n });
+      return;
+    }
     const n = customOf(p.f.page).filter(o => o.type === 'bin').length + 1;
-    addObj(p.f, { type: 'bin', u0: uv[0], v0: uv[1], u1: uv[0], v1: uv[1], h: 0, name: 'Bình thêm ' + n });
+    addObj(p.f, { type: 'bin', binh: loai, u0: uv[0], v0: uv[1], u1: uv[0], v1: uv[1],
+                  h: 0, name: TEN_BINH[loai] + ' ' + n });
     return;
   }
   if (ev.target !== renderer.domElement) return;
@@ -4091,6 +4106,40 @@ function setTool(t) {
   setTimeout(() => { if (state.tool === t) hint(''); }, 2800);
 }
 
+// O chon cao trinh ngay trong tab Thiet ke. Truoc day phai sang tab Xem bam ten
+// cao trinh; chua bam thi may van ve len cao trinh dau tien -> vat roi ra ngoai
+// tam nhin, nguoi dung tuong la khong ve duoc.
+function dungOChonTang() {
+  const sl = $('#dTang');
+  if (!sl) return;
+  if (!sl.options.length) {
+    for (const f of state.data.floors) {
+      const o = document.createElement('option');
+      o.value = f.page;
+      o.textContent = f.name;
+      sl.appendChild(o);
+    }
+    sl.onchange = () => {
+      state.activeFloor = +sl.value;
+      state.visible = new Set([state.activeFloor]);
+      applyVisibility();
+      if (typeof syncFloorRows === 'function') syncFloorRows();
+      renderDesignList(); renderEditPanel();
+      focusFloor(state.activeFloor);
+    };
+  }
+  if (state.activeFloor == null) {          // chua chon -> lay cao trinh gan mat nhin nhat
+    let tot = state.data.floors[0], d = 1e9;
+    for (const f of state.data.floors) {
+      const k = Math.abs(floorY(f) - controls.target.y);
+      if (k < d) { d = k; tot = f; }
+    }
+    state.activeFloor = tot.page;
+    if (typeof syncFloorRows === 'function') syncFloorRows();
+  }
+  sl.value = state.activeFloor;
+}
+
 function setMode(m) {
   state.mode = m;
   if (typeof applyVisibility === 'function' && masses.length) setTimeout(applyVisibility, 0);
@@ -4100,6 +4149,7 @@ function setMode(m) {
   $('#paneDesign').style.display = m === 'design' ? '' : 'none';
   $('#hud').style.display = m === 'view' ? '' : 'none';
   if (m === 'design') {
+    dungOChonTang();
     renderDesignList(); renderEditPanel(); setTool(state.tool);
     if (!state.plan) {
       hint('Mẹo: bấm “◳ Mặt bằng 2D” (phím P) để vẽ như trên giấy — dễ hơn nhiều');
@@ -4620,6 +4670,15 @@ function matBang(bat) {
     camOrtho.updateMatrixWorld(true);        // cập nhật ngay, nếu không cú bấm đầu tiên sẽ trượt
     // chỉ hiện đúng cao trình đang vẽ, nét bản vẽ rõ nhất, tường mờ bớt để thấy nét dưới
     state.visible = new Set([f.page]);
+    // Vao mat bang 2D la de DO LAI theo ban ve -> tu bat anh ban ve nen.
+    // Truoc day mac dinh tat, nguoi dung vao thay to giay trang, tuong la
+    // ve tuong ra ma khong len net.
+    if (!state.showPlan && f.image) {
+      state.showPlan = true;
+      try { localStorage.setItem(khoaKho('showPlan'), '1'); } catch (err) { }
+      const bp = $('#plan2d');
+      if (bp) { bp.classList.add('pri'); bp.textContent = 'Bản vẽ mặt bằng'; }
+    }
     if (state.showPlan) { state.opacity = 1; $('#opacity').value = 1; }
     if ($('#wallop').value > 0.35) { $('#wallop').value = 0.3; matWallShared.opacity = 0.3; }
     applyVisibility(); renderSidebar();
