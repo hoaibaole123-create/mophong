@@ -1839,6 +1839,17 @@ const MAT_SEL = new THREE.MeshStandardMaterial({ color: 0xffc14d, roughness: .4,
 let customMeshes = [], ghost = null;
 const drag = { on: false, a: null, b: null, id: null, px: 0, py: 0 };
 
+// Be day tuong LUC VE. Tuong that chi 0,22 m; o mat bang 2D khung nhin rong
+// hang chuc met nen ra khoang 2 pixel, lan het vao net den cua ban ve -> nguoi
+// dung tuong la ve khong len net. Khi dang o 2D thi ve day toi thieu bang
+// 1/150 be rong khung nhin, doi ra man hinh khoang 5-6 pixel.
+function dayVeTuong(o) {
+  const that = o.t || .22;
+  if (!state.plan || !camOrtho) return that;
+  const nua = (camOrtho.top - camOrtho.bottom) / 2 / (camOrtho.zoom || 1);
+  return Math.max(that, nua / 28);
+}
+
 function activeFloorObj() {
   return floorOf(state.activeFloor ?? state.data.floors[0].page);
 }
@@ -2177,6 +2188,7 @@ function rebuildCustom() {
         } else if (o.type === 'wall') {
           const dx = bx - ax, dz = bz - az;
           const len = Math.max(.1, Math.hypot(dx, dz));
+          const day = dayVeTuong(o);            // ở 2D phải đủ dày để nhìn thấy
           const goc = -Math.atan2(dz, dx) + (o.rot || 0);
           // Khoét ô cửa: cửa nào nằm trên tuyến tường này thì tường chừa ra, chỉ còn lanh tô.
           const o_ = { x: (ax + bx) / 2, z: (az + bz) / 2 };
@@ -2205,7 +2217,7 @@ function rebuildCustom() {
             oCua.push([a0, a1, (c.h || 2.1) * state.explode]);
           }
           if (!oCua.length) {
-            mesh = new THREE.Mesh(new THREE.BoxGeometry(len, h, o.t || .22), mat);
+            mesh = new THREE.Mesh(new THREE.BoxGeometry(len, h, day), mat);
             mesh.position.set((ax + bx) / 2, y + h / 2, (az + bz) / 2);
             mesh.rotation.y = goc;
           } else {
@@ -2213,7 +2225,7 @@ function rebuildCustom() {
             mesh = new THREE.Group();
             const dat = (t0, t1, yTam, cao) => {
               if (t1 - t0 < .02 || cao < .02) return;
-              const m = new THREE.Mesh(new THREE.BoxGeometry(t1 - t0, cao, o.t || .22), mat);
+              const m = new THREE.Mesh(new THREE.BoxGeometry(t1 - t0, cao, day), mat);
               m.position.set((t0 + t1) / 2 - len / 2, yTam, 0);
               mesh.add(m);
             };
@@ -4656,12 +4668,31 @@ function matBang(bat) {
     }
     // Tường vốn màu be xám, nằm trên nền BẢN VẼ TRẮNG thì gần như mất hút.
     // Vào mặt bằng 2D thì đổi sang xanh đậm cho nổi rõ trên nền trắng.
-    matWallShared.color.setHex(0x1f4f9c);
+    matWallShared.color.setHex(0xff2d55);   // hong canh, khong lan voi net den va mui ten xanh
     const m = floorMeshes.find(x => x.userData.floor.page === f.page);
     const hop = m ? new THREE.Box3().setFromObject(m) : null;
     const c = hop ? hop.getCenter(new THREE.Vector3()) : new THREE.Vector3(0, floorY(f), 0);
     const sz = hop ? hop.getSize(new THREE.Vector3()) : new THREE.Vector3(80, 1, 80);
     const a = Math.max(0.2, view.clientWidth / Math.max(1, view.clientHeight));
+    // Khung ảnh bản vẽ thường thừa nhiều giấy trắng quanh mặt bằng. Lấy vùng
+    // THỰC SỰ CÓ THIẾT BỊ để phóng cho vừa, nếu không mặt bằng hiện bé tí giữa
+    // tờ giấy, vẽ tường ra chỉ còn vài pixel, tưởng là không lên nét.
+    let bx0 = 1e9, bz0 = 1e9, bx1 = -1e9, bz1 = -1e9;
+    const gom = (px, pz) => {
+      bx0 = Math.min(bx0, px); bz0 = Math.min(bz0, pz);
+      bx1 = Math.max(bx1, px); bz1 = Math.max(bz1, pz);
+    };
+    for (const it of state.data.items) {
+      if (it.floor !== f.page) continue;
+      const q = worldXZ(f, ...viTriBinh(it)); gom(q[0], q[1]);
+    }
+    for (const o of customOf(f.page)) {
+      gom(...worldXZ(f, o.u0, o.v0)); gom(...worldXZ(f, o.u1, o.v1));
+    }
+    if (bx0 < bx1 && bz0 < bz1 && (bx1 - bx0) > 3 && (bz1 - bz0) > 3) {
+      c.x = (bx0 + bx1) / 2; c.z = (bz0 + bz1) / 2;
+      sz.x = (bx1 - bx0) * 1.35; sz.z = (bz1 - bz0) * 1.35;   // chừa lề 35 %
+    }
     nuaKhung = Math.max(8, sz.z * 0.55, (sz.x * 0.55) / a);   // lọt cả bề ngang lẫn bề dọc
     camera = camOrtho;
     camOrtho.zoom = 1;
@@ -4684,6 +4715,7 @@ function matBang(bat) {
       if (bp) { bp.classList.add('pri'); bp.textContent = 'Bản vẽ mặt bằng'; }
     }
     if (state.showPlan) { state.opacity = 1; $('#opacity').value = 1; }
+    rebuildCustom();                           // dung lai tuong theo be day cua che do 2D
     const dam = 0.75;                          // du dam de thay ro tren nen trang
     $('#wallop').value = dam;
     matWallShared.opacity = dam; matWallShared.visible = true;
@@ -4705,6 +4737,7 @@ function matBang(bat) {
       state.truocPlan = null;
       applyVisibility(); renderSidebar();
     }
+    rebuildCustom();                           // tra tuong ve be day that
     focusFloor(f.page);
   }
   resize();
@@ -4762,6 +4795,16 @@ fetch(duongDL('plant.json?v=') + Date.now()).then(r => r.json()).then(d => {
   let canVe = true, choiLai = 0;
   window.veLai = (n) => { canVe = true; choiLai = Math.max(choiLai, n || 0); };
   controls.addEventListener('change', () => window.veLai(2));
+  // O mat bang 2D, be day ve cua tuong phu thuoc muc phong to -> dung lai khi
+  // muc phong doi nhieu, co han luong cho khoi giat.
+  let zoomCu = 0, henZoom = null;
+  controls.addEventListener('change', () => {
+    if (!state.plan) return;
+    const z = camOrtho.zoom;
+    if (Math.abs(Math.log(z / (zoomCu || 1))) < 0.18) return;
+    clearTimeout(henZoom);
+    henZoom = setTimeout(() => { zoomCu = z; rebuildCustom(); }, 160);
+  });
   ['pointerdown', 'pointerup', 'pointermove', 'wheel', 'keydown', 'keyup', 'input', 'change']
     .forEach(e => addEventListener(e, () => window.veLai(2), { passive: true }));
   addEventListener('resize', () => window.veLai(4));
