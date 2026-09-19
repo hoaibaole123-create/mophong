@@ -1808,7 +1808,8 @@ function applyVisibility() {
     const it = m.userData.item;
     const okF = state.visible.has(it.floor);
     const okT = state.typeOn.has(it.type);
-    const okQ = !q || it.id.includes(q) || (it.room || '').includes(q) ||
+    const okQ = !q || it.id.includes(q) || (it.ma || '').toUpperCase().includes(q) ||
+      (it.room || '').includes(q) ||
       state.data.types[it.type].label.toUpperCase().includes(q);
     m.visible = okF && okT && okQ && editsOf(it.floor).delItem.indexOf(it.id) < 0;
     // Đi bộ thì bình phải đúng cỡ thật (cao ~0,55 m) chứ không phải cỡ ký hiệu
@@ -4752,7 +4753,8 @@ function onPointer(ev, click) {
     tip.style.display = 'block';
     tip.style.left = (ev.clientX - r.left + 14) + 'px';
     tip.style.top = (ev.clientY - r.top + 12) + 'px';
-    tip.innerHTML = `<b>${it.id}</b> — ${state.data.types[it.type].label}<br>
+    // Hien dung ten in tren ban ve (neu co) — phai khop voi the kiem tra.
+    tip.innerHTML = `<b>${it.ma || it.id}</b> — ${state.data.types[it.type].label}<br>
                      ${f.name}${it.room ? ' · ' + it.room : ''}`;
     renderer.domElement.style.cursor = 'pointer';
   } else {
@@ -4829,7 +4831,7 @@ $('#csv').onclick = () => {
   for (const it of state.data.items) {
     const f = floorOf(it.floor);
     const k = f.georef === 'standalone' ? 1 : s;
-    rows.push([it.id, state.data.types[it.type].label, f.elevation.toFixed(2), f.name,
+    rows.push([it.ma || it.id, state.data.types[it.type].label, f.elevation.toFixed(2), f.name,
       it.room || '', (viTriBinh(it)[0] * k).toFixed(2), (viTriBinh(it)[1] * k).toFixed(2), f.page + 1]);
   }
   const csv = '﻿' + rows.map(r => r.map(v => `"${v}"`).join(',')).join('\n');
