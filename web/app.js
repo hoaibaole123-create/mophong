@@ -396,9 +396,10 @@ function xoayNutBao(g, f, x, z) {
   g.rotation.y = -Math.atan2(t.uz, t.ux) + (ben < 0 ? Math.PI : 0);
 }
 
-function makeNutBao() {
+function makeNutBao(chon) {
   const V = vlNutBao();
   const g = new THREE.Group();
+  if (chon) { g.userData.chon = true; }
   const R = .11;                                   // hộp tròn đường kính 22 cm
   const than = new THREE.Mesh(new THREE.CylinderGeometry(R, R * .82, .07, 24), V.vo);
   than.rotation.x = Math.PI / 2;
@@ -408,6 +409,7 @@ function makeNutBao() {
   nut.rotation.x = Math.PI / 2; nut.position.set(0, -.012, .045);
   const den = new THREE.Mesh(new THREE.SphereGeometry(.012, 10, 8), V.den);
   den.position.set(0, -.072, .042);
+  if (chon) { than.material = MAT_SEL; mat.material = MAT_SEL; }
   g.add(than, mat, nut, den);
   g.position.y = 1.4;                              // treo cao 1,4 m như thực tế
   return g;
@@ -2082,6 +2084,13 @@ function rebuildCustom() {
           mesh.add(m);
         }
         mesh.position.set(0, 0, 0);
+      } else if (o.type === 'nutbao') {
+        // makeNutBao() tu nang minh len 1,4 m; o day dat lai nen phai cong vao,
+        // neu khong nut se nam bet duoi san.
+        mesh = makeNutBao(state.sel === 'c:' + o.id);
+        mesh.position.set(ax, y + (o.h || 1.4), az);
+        mesh.rotation.y = (o.rot || 0);
+        xoayNutBao(mesh, f, ax, az);            // áp lưng vào tường gần nhất
       } else if (o.type === 'hong') {
         mesh = makeHydrant(state.sel === 'c:' + o.id);
         const t = tuongGanNhat(f, ax, az);
@@ -2279,7 +2288,7 @@ function renderDesignList() {
   $('#dtarget').innerHTML = 'Đang vẽ lên: <b>' + f.name + '</b><br>' +
     'Muốn đổi tầng: sang tab <i>Xem</i>, bấm tên cao trình khác.';
   box.innerHTML = list.length ? '' : '<div class="sub">Chưa có đối tượng nào ở cao trình này.</div>';
-  const col = t => t === 'san' ? '#6fa8c8' : t === 'hong' ? '#cf2b20' : t === 'thangmay' ? '#7f8b97' : t === 'lo' ? '#c8b06a' : t === 'thangbo' ? '#c3bfb4' : t === 'beacon' ? '#e0231c' : t === 'chop' ? '#c6c2b7' : t === 'toma' ? '#b9b6ad' : t === 'emg' ? '#f2f2ee' : t === 'fm200' ? '#c2231b' : t === 'bin' ? '#e23b2e' : t === 'wall' ? '#d8c6a8'
+  const col = t => t === 'san' ? '#6fa8c8' : t === 'nutbao' ? '#cc1f18' : t === 'hong' ? '#cf2b20' : t === 'thangmay' ? '#7f8b97' : t === 'lo' ? '#c8b06a' : t === 'thangbo' ? '#c3bfb4' : t === 'beacon' ? '#e0231c' : t === 'chop' ? '#c6c2b7' : t === 'toma' ? '#b9b6ad' : t === 'emg' ? '#f2f2ee' : t === 'fm200' ? '#c2231b' : t === 'bin' ? '#e23b2e' : t === 'wall' ? '#d8c6a8'
     : t === 'tra' ? '#96a3b0' : t === 'rail' ? '#c9d4de' : t === 'stair' ? '#b9c3cd' : '#5fa0c8';
   list.forEach(o => {
     const r = el('div', 'objrow',
@@ -3785,6 +3794,13 @@ function designDown(ev) {
          ' (hoặc Enter) để khép kín, Backspace bỏ điểm cuối, Esc huỷ');
     return;
   }
+  if (state.tool === 'nutbao') {
+    const uv = baseFromWorld(p.f, p.x, p.z);
+    const n = customOf(p.f.page).filter(o => o.type === 'nutbao').length + 1;
+    addObj(p.f, { type: 'nutbao', u0: uv[0], v0: uv[1], u1: uv[0], v1: uv[1],
+                  h: 1.4, base: 0, name: 'Nút ấn báo cháy ' + n });
+    return;
+  }
   if (state.tool === 'hong') {
     const uv = baseFromWorld(p.f, p.x, p.z);
     const n = customOf(p.f.page).filter(o => o.type === 'hong').length + 1;
@@ -4112,6 +4128,7 @@ function setTool(t) {
     : t === 'lo' ? 'Bấm từng điểm theo con trỏ để vẽ đường bao ô thông tầng; bấm lại vào điểm đầu (hoặc Enter) để khép kín'
     : t === 'thangmay' ? 'Rê khung hố thang (bề rộng × chiều sâu); chiều cao đặt ở ô Chiều cao thang máy'
     : t === 'thangbo' ? 'Vẽ dọc theo một vế thang (chiều dài vế); thang tự chia đủ số vế và chiếu nghỉ để lên hết tầng'
+    : t === 'nutbao' ? 'Bấm lên sàn để đặt nút ấn báo cháy — tự áp vào tường gần nhất, cao 1,4 m'
     : t === 'hong' ? 'Bấm lên sàn để đặt hộp họng nước — tủ tự áp lưng vào tường gần nhất'
     : t === 'beacon' ? 'Bấm lên vị trí muốn đặt đèn quay báo động'
     : t === 'chop' ? 'Bấm ở mép đáy chóp, rê sang mép đối diện rồi bấm lần nữa (khoảng cách = bề rộng đáy)'
@@ -4259,7 +4276,7 @@ function initDesign() {
     }
     if (typing) return;
     if (e.key === 'p' || e.key === 'P') { matBang(!state.plan); return; }
-    const map = { '1': 'sel', '2': 'wall', '3': 'box', '4': 'tra', '5': 'bin', '6': 'rail', '7': 'stair', '8': 'roof', '9': 'door', '0': 'exit', 'e': 'emg', 'E': 'emg', 'f': 'fm200', 'F': 'fm200', 'g': 'toma', 'G': 'toma', 'p': 'chop', 'P': 'chop', 'b': 'beacon', 'B': 'beacon', 't': 'thangbo', 'T': 'thangbo', 'o': 'lo', 'O': 'lo', 'n': 'san', 'N': 'san', 'k': 'catsan', 'K': 'catsan', 'j': 'gopmep', 'J': 'gopmep', 'm': 'thangmay', 'M': 'thangmay', 'h': 'hong', 'H': 'hong' };
+    const map = { '1': 'sel', '2': 'wall', '3': 'box', '4': 'tra', '5': 'bin', '6': 'rail', '7': 'stair', '8': 'roof', '9': 'door', '0': 'exit', 'e': 'emg', 'E': 'emg', 'f': 'fm200', 'F': 'fm200', 'g': 'toma', 'G': 'toma', 'p': 'chop', 'P': 'chop', 'b': 'beacon', 'B': 'beacon', 't': 'thangbo', 'T': 'thangbo', 'o': 'lo', 'O': 'lo', 'n': 'san', 'N': 'san', 'k': 'catsan', 'K': 'catsan', 'j': 'gopmep', 'J': 'gopmep', 'm': 'thangmay', 'M': 'thangmay', 'h': 'hong', 'H': 'hong', 'a': 'nutbao', 'A': 'nutbao' };
     if (map[e.key]) setTool(map[e.key]);
   });
   $('#dDel').onclick = () => deleteSelection();
