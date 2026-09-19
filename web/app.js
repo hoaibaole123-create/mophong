@@ -455,7 +455,24 @@ function treoBinhLenTuong(g, f, x, z, loai, ySan) {
   // gia do: mot ban thep ap tuong sau lung binh
   const gia = new THREE.Mesh(new THREE.BoxGeometry(.24, .10, .03), MAT_GIA_BINH);
   gia.position.set(0, .30, -.13);
+  gia.userData.gia = true;
   g.add(gia);
+}
+
+// Dat lai toan bo binh boc tu ban ve: ve them/xoa tuong thi binh gan do phai
+// tu bam len tuong (hoac roi xuong san neu tuong bi xoa) ma khong phai tai lai.
+function datLaiViTriBinh() {
+  for (const m of markers) {
+    const it = m.userData.item, f = floorOf(it.floor);
+    const cu = m.children.find(c => c.userData.gia);   // go gia do cu di da
+    if (cu) { m.remove(cu); cu.geometry.dispose(); }
+    const doi = editsOf(f.page).movItem[it.id];
+    const [x, z] = worldXZ(f, doi ? doi[0] : it.bx, doi ? doi[1] : it.by);
+    m.position.set(x, floorY(f) + .05, z);
+    m.rotation.y = 0;
+    if (it.type === 'NUTBAO') xoayNutBao(m, f, x, z);
+    else treoBinhLenTuong(m, f, x, z, it.type, floorY(f));
+  }
 }
 
 function makeNutBao(chon) {
@@ -1899,13 +1916,7 @@ function relayout() {
     const [wx0, wz0] = worldXZ(f, x0, y0), [, wz1] = worldXZ(f, 0, f.box[3]);
     l.position.set(wx0 + 4, floorY(f) + 2.4, (wz0 + wz1) / 2);
   });
-  for (const m of markers) {
-    const it = m.userData.item, f = floorOf(it.floor);
-    const doi = editsOf(f.page).movItem[it.id];
-    const [x, z] = worldXZ(f, doi ? doi[0] : it.bx, doi ? doi[1] : it.by);
-    m.position.set(x, floorY(f) + .05, z);
-    if (it.type === 'NUTBAO') xoayNutBao(m, f, x, z);
-  }
+  datLaiViTriBinh();
   masses.forEach(m => { m.traverse(o => o.geometry && o.geometry.dispose()); massGroup.remove(m); });
   masses = []; pickables = []; pickRects = [];
   for (const f of state.data.floors) {
@@ -2362,6 +2373,8 @@ function rebuildCustom() {
     }
   }
   ganMaSo();                                   // đánh mã cho vật tự vẽ
+  // Vua ve/xoa/doi tuong -> dat lai binh de no bam len tuong moi ngay lap tuc.
+  if (markers.length) datLaiViTriBinh();
   renderDesignList();
 }
 
