@@ -2445,7 +2445,13 @@ function removeObj(id) {
   chup();
   for (const p of Object.keys(state.custom)) {
     const i = state.custom[p].findIndex(o => o.id === id);
-    if (i >= 0) { state.custom[p].splice(i, 1); break; }
+    if (i < 0) continue;
+    // Tuong cong gom nhieu doan mang chung ma nhom -> xoa la di ca vong,
+    // khong bat nguoi dung xoa tung doan mot.
+    const nhom = state.custom[p][i].nhom;
+    if (nhom) state.custom[p] = state.custom[p].filter(o => o.nhom !== nhom);
+    else state.custom[p].splice(i, 1);
+    break;
   }
   if (state.sel === 'c:' + id) state.sel = null;
   saveCustom(); rebuildCustom(); rebuildMasses();
@@ -3677,6 +3683,23 @@ function showGhost(a, b) {
   const t = +$('#dThick').value || .22;
   const hb = +$('#dBoxH').value || 2;
   const mat = new THREE.MeshStandardMaterial({ color: 0xffc14d, transparent: true, opacity: .5 });
+  if (state.tool === 'cong') {
+    const r = Math.max(.1, Math.hypot(b.x - a.x, b.z - a.z));
+    const quet = +($('#dQuet') || {}).value || 360;
+    const goc0 = Math.atan2(b.z - a.z, b.x - a.x);
+    const n = soDoanCung(r, quet * Math.PI / 180);
+    ghost = new THREE.Mesh(
+      new THREE.RingGeometry(Math.max(.02, r - t / 2), r + t / 2, n, 1,
+        -goc0 - quet * Math.PI / 180, quet * Math.PI / 180),
+      new THREE.MeshBasicMaterial({ color: 0xffc14d, transparent: true, opacity: .55,
+        side: THREE.DoubleSide }));
+    ghost.rotation.x = -Math.PI / 2;
+    ghost.position.set(a.x, y + .05, a.z);
+    hint('Bán kính ' + r.toFixed(2) + ' m · quét ' + quet + '° · ' + n +
+      ' đoạn — bấm lần nữa để chốt');
+    customGroup.add(ghost);
+    return;
+  }
   if (state.tool === 'wall') {
     const dx = b.x - a.x, dz = b.z - a.z;
     const len = Math.max(.1, Math.hypot(dx, dz));
@@ -4130,6 +4153,45 @@ function designUp(ev) {
   chotVe();
 }
 
+// ---------------------------------------------------------------------------
+// TUONG CONG / TRON. Nha PK cua Ialy la nha hinh tron nen tuong bao phai di
+// theo cung tron. Ve bang cach keo tu TAM ra MEP: diem dau la tam, diem cuoi
+// cho ban kinh. Goc quet lay o o "Goc quet" (360 do = vong tron kin).
+//
+// Cung tron duoc chia thanh nhieu DOAN TUONG THANG noi tiep. Nho vay moi thu
+// san co — dung tuong khi di bo, treo binh len tuong, khoet o cua, net tuong
+// tren mat bang 2D — deu dung luon, khong phai lam rieng cho tuong cong.
+// Cac doan mang chung mot ma nhom de xoa mot phat la di ca vong.
+function soDoanCung(r, quet) {
+  // doan dai khoang 0,6 m; it nhat 8 doan moi vong, nhieu nhat 180
+  const cung = Math.abs(r * quet);
+  return Math.max(3, Math.min(180, Math.round(cung / 0.6)));
+}
+
+function veTuongCong(f, tamU, tamV, mepU, mepV, opt) {
+  const r = Math.hypot(mepU - tamU, mepV - tamV);
+  if (r < .2) return 0;
+  const quet = (opt.quet || 360) * Math.PI / 180;
+  const goc0 = Math.atan2(mepV - tamV, mepU - tamU);
+  const n = soDoanCung(r * mpp(), quet);
+  const nhom = 'N' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+  const kin = Math.abs(opt.quet - 360) < .5;
+  chup();
+  for (let i = 0; i < n; i++) {
+    const g1 = goc0 + quet * i / n, g2 = goc0 + quet * (i + 1) / n;
+    customOf(f.page).push({
+      type: 'wall', nhom,
+      id: 'C' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5) + i,
+      u0: tamU + r * Math.cos(g1), v0: tamV + r * Math.sin(g1),
+      u1: tamU + r * Math.cos(g2), v1: tamV + r * Math.sin(g2),
+      t: opt.t, h: opt.h, base: opt.base,
+      name: (kin ? 'Tường tròn' : 'Tường cong') + ' ' + opt.stt + ' (' + (i + 1) + '/' + n + ')',
+    });
+  }
+  saveCustom(); rebuildCustom();
+  return n;
+}
+
 function huyVe() {
   drag.on = false; drag.id = null; drag.a = null; drag.b = null;
   controls.enabled = true; showGhost(null, null); hint('');
@@ -4145,6 +4207,17 @@ function chotVe() {
   const p0 = baseFromWorld(f, a.x, a.z), p1 = baseFromWorld(f, b.x, b.z);
   const n = customOf(f.page).length + 1;
   const common = { u0: p0[0], v0: p0[1], u1: p1[0], v1: p1[1] };
+  if (state.tool === 'cong') {
+    const n = veTuongCong(f, p0[0], p0[1], p1[0], p1[1], {
+      quet: +($('#dQuet') || {}).value || 360,
+      t: +$('#dThick').value || .22, h: +$('#dWallH').value || 0,
+      base: +$('#dBase').value || 0, stt: n,
+    });
+    hint(n ? 'Đã vẽ tường cong ' + n + ' đoạn' : 'Bán kính quá nhỏ');
+    setTimeout(() => hint(''), 1600);
+    drag.a = drag.b = null;
+    return;
+  }
   if (state.tool === 'wall') {
     addObj(f, Object.assign({ type: 'wall', t: +$('#dThick').value || .22,
       h: +$('#dWallH').value || 0, base: +$('#dBase').value || 0,
@@ -4242,6 +4315,7 @@ function setTool(t) {
     : t === 'chop' ? 'Bấm ở mép đáy chóp, rê sang mép đối diện rồi bấm lần nữa (khoảng cách = bề rộng đáy)'
     : t === 'toma' ? 'Bấm ở mép hố tổ máy, rê sang mép đối diện rồi bấm lần nữa (khoảng cách = đường kính)'
     : t === 'fm200' ? 'Bấm lên mặt sàn để đặt bình khí FM-200'
+    : t === 'cong' ? 'Bấm vào TÂM vòng tròn rồi kéo ra mép để lấy bán kính'
     : t === 'bin' ? 'Bấm lên mặt sàn để đặt bình chữa cháy'
       : t === 'stair' ? 'Bấm CHÂN thang, rê chuột lên, bấm lần nữa ở ĐỈNH thang'
         : t === 'rail' ? 'Bấm điểm đầu lan can, rê chuột, bấm lần nữa để chốt'
@@ -4382,7 +4456,7 @@ function initDesign() {
     }
     if (typing) return;
     if (e.key === 'p' || e.key === 'P') { matBang(!state.plan); return; }
-    const map = { '1': 'sel', '2': 'wall', '3': 'box', '4': 'tra', '5': 'bin', '6': 'rail', '7': 'stair', '8': 'roof', '9': 'door', '0': 'exit', 'e': 'emg', 'E': 'emg', 'f': 'fm200', 'F': 'fm200', 'g': 'toma', 'G': 'toma', 'p': 'chop', 'P': 'chop', 'b': 'beacon', 'B': 'beacon', 't': 'thangbo', 'T': 'thangbo', 'o': 'lo', 'O': 'lo', 'n': 'san', 'N': 'san', 'k': 'catsan', 'K': 'catsan', 'j': 'gopmep', 'J': 'gopmep', 'm': 'thangmay', 'M': 'thangmay', 'h': 'hong', 'H': 'hong', 'a': 'nutbao', 'A': 'nutbao' };
+    const map = { '1': 'sel', '2': 'wall', 'c': 'cong', 'C': 'cong', '3': 'box', '4': 'tra', '5': 'bin', '6': 'rail', '7': 'stair', '8': 'roof', '9': 'door', '0': 'exit', 'e': 'emg', 'E': 'emg', 'f': 'fm200', 'F': 'fm200', 'g': 'toma', 'G': 'toma', 'p': 'chop', 'P': 'chop', 'b': 'beacon', 'B': 'beacon', 't': 'thangbo', 'T': 'thangbo', 'o': 'lo', 'O': 'lo', 'n': 'san', 'N': 'san', 'k': 'catsan', 'K': 'catsan', 'j': 'gopmep', 'J': 'gopmep', 'm': 'thangmay', 'M': 'thangmay', 'h': 'hong', 'H': 'hong', 'a': 'nutbao', 'A': 'nutbao' };
     if (map[e.key]) setTool(map[e.key]);
   });
   $('#dDel').onclick = () => deleteSelection();
