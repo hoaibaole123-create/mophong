@@ -73,7 +73,11 @@ def tenTrang(page, i):
     if ten.upper() == "HÀNG LANG":
         return "Hành lang"
     if re.match(r"^\d{3}M$", ten):
-        return "EL. %s — gian máy" % ten[:3]
+        # EL 323/327/332 la GIAN BIEN AP — ban ve danh ma thiet bi o day la
+        # HCC-BA.. (bien ap), khac han HCC-GM.. cua gian may ben duoi.
+        cao = int(ten[:3])
+        return "EL. %s — %s" % (ten[:3],
+                                "gian biến áp" if cao >= 320 else "gian máy")
     return ten
 
 

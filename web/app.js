@@ -4550,7 +4550,19 @@ function renderSidebar() {
   }
 
   const fl = $('#floors'); fl.innerHTML = '';
-  for (const f of [...d.floors].sort((a, b) => b.elevation - a.elevation)) {
+  // Nha may Ialy gom nhieu hang muc roi rac -> xep theo KHU NHA cho de tim.
+  // Ban ve chi co mot khoi (Ialy mo rong) thi khong hien tieu de khu.
+  const dsF = [...d.floors].sort((a, b) =>
+    (THU_TU_KHU.indexOf(khuNha(a)) - THU_TU_KHU.indexOf(khuNha(b))) ||
+    (b.elevation - a.elevation));
+  const nhomCo = new Set(dsF.map(khuNha));
+  let khuTruoc = null;
+  for (const f of dsF) {
+    const khu = khuNha(f);
+    if (nhomCo.size > 1 && khu !== khuTruoc) {
+      fl.appendChild(el('div', 'khu', khu));
+      khuTruoc = khu;
+    }
     const n = d.items.filter(i => i.floor === f.page).length;
     const row = el('div', 'row active');
     row.dataset.page = f.page;
@@ -4596,6 +4608,19 @@ function renderSidebar() {
     'Ô cửa được khoét thủng tường, chừa lanh tô, và dựng cánh cửa cao 2,05 m đúng chiều mở.'));
   notes.appendChild(el('div', 'sub', '<br>Nhà van cửa nhận nước (EL 521.25) là công trình riêng, ' +
     'được đặt tách sang một bên và phía trên nhà máy để dễ quan sát.'));
+}
+
+// Khu nha cua mot cao trinh. Thu tu tra ve cung la thu tu hien trong danh sach
+// (danh sach da sap theo cao do, cac cao trinh cung khu nam lien nhau).
+const THU_TU_KHU = ['Cửa nhận nước', 'Nhà PK', 'Gian biến áp', 'Gian máy',
+                    'Công trình phụ trợ'];
+function khuNha(f) {
+  const t = (f.name || '').toUpperCase();
+  if (t.startsWith('CNN') || t.includes('CỬA NHẬN NƯỚC')) return 'Cửa nhận nước';
+  if (t.includes('NHÀ PK')) return 'Nhà PK';
+  if (t.includes('GIAN BIẾN ÁP')) return 'Gian biến áp';
+  if (t.includes('GIAN MÁY') || t.includes('SÀN ')) return 'Gian máy';
+  return 'Công trình phụ trợ';
 }
 
 function syncFloorRows() {
