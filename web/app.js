@@ -373,6 +373,8 @@ function makeMarker(type, mat) {
     g.add(m1, m2);
     g.userData.abc = [m1, m2];                   // dùng chung cơ chế đổi vật liệu
     g.userData.vl = V;
+  } else if (type === 'FM200') {            // cum chai khi FM-200
+    g.add(makeFM200(false, 1.80));
   } else if (type === 'NUTBAO') {
     g.add(makeNutBao());
   } else {
@@ -443,7 +445,7 @@ function xoayNutBao(g, f, x, z) { apVaoTuong(g, f, x, z, .05); }
 // khoang 40 cm. Binh xe day (CO224) dung duoi san, binh khi FM-200 la cum
 // chai co dinh nen ca hai deu khong treo.
 const CAO_TREO_BINH = 0.40;
-const LOAI_TREO = ['ABC8', 'CO25', 'CO2'];
+const LOAI_TREO = ['ABC8', 'CO25', 'CO2'];   // FM-200 va CO2 24kg xe day: de duoi san
 let MAT_GIA_BINH = null;
 function treoBinhLenTuong(g, f, x, z, loai, ySan) {
   if (!LOAI_TREO.includes(loai)) return;
@@ -4874,11 +4876,12 @@ function theOf(page) {
 
 const TEN_PT = {
   ABC8: 'Bình Bột', CO25: 'Bình CO₂', CO224: 'Bình CO₂ xe đẩy', CO2: 'Bình CO₂',
-  HONG: 'Họng nước', NUTBAO: 'Nút ấn báo cháy',
+  HONG: 'Họng nước', NUTBAO: 'Nút ấn báo cháy', FM200: 'Bình khí FM-200',
   hong: 'Họng nước vách tường', nutbao: 'Nút ấn báo cháy', fm200: 'Bình khí FM-200'
 };
 const VIET_TAT = { ABC8: 'BỘT', CO25: 'CO2', CO224: 'CO2', CO2: 'CO2', HONG: 'HCC',
-                   NUTBAO: 'NA', hong: 'HCC', nutbao: 'NA', fm200: 'FM200', bin: 'BỘT' };
+                   NUTBAO: 'NA', FM200: 'FM200', hong: 'HCC', nutbao: 'NA',
+                   fm200: 'FM200', bin: 'BỘT' };
 
 // Ma khu viet tat, lay tu ten cao trinh khi ban ve khong ghi san.
 function maKhu(f) {

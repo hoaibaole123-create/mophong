@@ -86,6 +86,9 @@ TYPES = {
     "ABC": dict(code="ABC8", label="Bình bột ABC 8kg (MFZL-8)", color="#e23b2e"),
     "CO2_5": dict(code="CO25", label="Bình CO₂ 5kg (MT-5)", color="#2f74d0"),
     "CO2_24": dict(code="CO224", label="Bình CO₂ 24kg xe đẩy (MT-24)", color="#1f9d6b"),
+    # He chua chay bang khi FM-200 (khong bóc tu ban ve, them theo danh sach
+    # ten cua don vi) — xem themFM200().
+    "FM200": dict(code="FM200", label="Bình khí FM-200", color="#c2231b"),
 }
 
 ROOM_RE = re.compile(r"^(P\d{3,4}|CT\.\d|TG|HG|TM|MDB-\d|AxT\d)$", re.I)
@@ -269,6 +272,80 @@ def to_line_art(pix):
     return Image.fromarray(out, "RGBA")
 
 
+# ---------------------------------------------------------------------------
+# DANH SO BINH theo danh sach ten cua don vi (TEN BINH CHUA CHAY.xlsx):
+#
+#     <LOAI>-▼<cao trinh>-<so 3 chu so><he>-PX1      vd BỘT-▼348,00-153IMR-PX1
+#
+# So thu tu chay LIEN TUC tu cao trinh THAP NHAT len cao nhat, moi loai mot
+# day rieng. Danh sach goc danh so bot dung nhu vay roi; CO2 thi moi cao trinh
+# lai dem lai tu dau nen trung so nhau — o day danh lai cho ca ba loai theo
+# cung mot luat.
+#
+# He: IMR cho binh xach tay; binh khi FM-200 o EL 316,60 co hai he rieng la
+# CIMR va DPIMR, moi he mot day so.
+# ---------------------------------------------------------------------------
+BINH_XACH_TAY = ("ABC8", "CO25", "CO224")
+SO_CO2_THEM = 2          # cao trinh nao khong co binh CO2 thi them may binh
+
+
+def themBinhThieu(floors, items):
+    """Cao trinh nao thieu loai binh nao thi them vao.
+
+    Chi them BINH XACH TAY (bot / CO2) — day la trang bi cua tung san. FM-200
+    la he chua chay bang khi cho tung PHONG, khong phai binh de tren san, nen
+    khong tu rai ra cac cao trinh khac.
+
+    Binh them duoc dat o GIUA san de de thay; vi tri that do nguoi dung keo.
+    """
+    for f in floors:
+        co = {it["type"] for it in items if it["floor"] == f["page"]}
+        if "CO25" in co or "CO224" in co:
+            continue
+        for i in range(SO_CO2_THEM):
+            items.append(dict(id="FE-T%02d%d" % (f["page"], i + 1), floor=f["page"],
+                              type="CO25", bx=round(-1.5 + i * 3.0, 2), by=0.0,
+                              room=None, them=True))
+
+
+# Cum chai khi FM-200 o EL 316,60 — hai he doc lap theo danh sach cua don vi.
+FM200_EL = 316.60
+FM200_HE = {"CIMR": 14, "DPIMR": 14}
+
+
+def themFM200(floors, items):
+    f = min(floors, key=lambda f: abs(f["elevation"] - FM200_EL))
+    if any(it["type"] == "FM200" for it in items if it["floor"] == f["page"]):
+        return
+    n = 0
+    for he, so in FM200_HE.items():
+        for i in range(so):
+            items.append(dict(id="FM-%s-%02d" % (he, i + 1), floor=f["page"],
+                              type="FM200", bx=round(-9.0 + (n % 8) * 2.6, 2),
+                              by=round(-4.0 + (n // 8) * 2.6, 2),
+                              room=None, he=he, them=True))
+            n += 1
+
+
+def danhSoBinh(floors, items):
+    cao = {f["page"]: f["elevation"] for f in floors}
+    thuTu = {f["page"]: i for i, f in
+             enumerate(sorted(floors, key=lambda f: f["elevation"]))}
+    dem = {}
+    for it in sorted(items, key=lambda it: (thuTu[it["floor"]], it["id"])):
+        he = it.get("he", "IMR")
+        khoa = (LOAI_TEN[it["type"]], he)
+        dem[khoa] = dem.get(khoa, 0) + 1
+        it["so"] = dem[khoa]
+        it["he"] = he
+        it["ma"] = "%s-▼%s-%03d%s-PX1" % (
+            LOAI_TEN[it["type"]], ("%.2f" % cao[it["floor"]]).replace(".", ","),
+            it["so"], he)
+
+
+LOAI_TEN = {"ABC8": "BỘT", "CO25": "CO2", "CO224": "CO2", "FM200": "FM200"}
+
+
 def main():
     os.makedirs(IMG_DIR, exist_ok=True)
     doc = pymupdf.open(PDF)
@@ -343,6 +420,10 @@ def main():
             legend={TYPES[a]["code"]: b for a, b in legend.items()},
             count=cmp_found))
         print(f"trang {page_idx+1:2d}  {name:40s} {len(syms):3d} binh  {cmp_found}  {georef} k={k:.3f}")
+
+    themBinhThieu(floors, items)
+    themFM200(floors, items)
+    danhSoBinh(floors, items)
 
     data = dict(
         project="Nhà máy thuỷ điện Ialy mở rộng (2×180MW) — Bình chữa cháy xách tay",
