@@ -96,9 +96,11 @@ let pickRects = [];
 // ---------------------------------------------------------------------------
 const NHA_MAY = {
   mr: { ten: 'Ialy mở rộng', duong: './data/', kho: 'ialy', doc: 'ialy-mo-rong',
-        mo: 'Nhà máy thuỷ điện Ialy mở rộng (2×180MW) — bình chữa cháy xách tay' },
+        mo: 'Nhà máy thuỷ điện Ialy mở rộng (2×180MW) — bình chữa cháy xách tay',
+        ngaySD: '22/06/2023' },
   nm: { ten: 'Nhà máy Ialy', duong: './data/ialy/', kho: 'ialy.nm', doc: 'ialy-nha-may',
-        mo: 'Nhà máy thuỷ điện Ialy — sơ đồ thoát nạn & phương tiện PCCC&CNCH' }
+        mo: 'Nhà máy thuỷ điện Ialy — sơ đồ thoát nạn & phương tiện PCCC&CNCH',
+        ngaySD: '' }
 };
 const nhaMayDang = (() => {
   try { return localStorage.getItem('ialy.nhamay') === 'nm' ? 'nm' : 'mr'; }
@@ -4659,8 +4661,10 @@ function veTheKiemTra(khoa, page, tenPT, ky, ghiChu) {
   h += '<div class="dong">- Tên phương tiện: <b>' + tenPT + '</b></div>';
   h += '<div class="dong">- Ký mã hiệu: <b>' + ky + '</b> Số Seri: ' +
        '<input data-o="seri" value="' + (d.seri || '') + '" style="text-align:left;width:38%"></div>';
+  // Ca nha may dua vao su dung cung mot ngay -> dien san, ai can thi sua lai.
+  const ngay = d.ngaySD || NM.ngaySD || '';
   h += '<div class="dong">- Ngày, tháng, năm đưa vào sử dụng: ' +
-       '<input data-o="ngaySD" value="' + (d.ngaySD || '') + '" style="text-align:left;width:40%" placeholder="dd/mm/yyyy"></div>';
+       '<input data-o="ngaySD" value="' + ngay + '" style="text-align:left;width:40%" placeholder="dd/mm/yyyy"></div>';
   h += '<table><tr><th>Ngày, tháng<br>kiểm tra</th><th>Kết quả<br>kiểm tra</th>' +
        '<th>Người, đơn vị<br>kiểm tra</th></tr>';
   for (let i = 0; i < 12; i++) {
