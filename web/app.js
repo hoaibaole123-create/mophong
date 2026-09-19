@@ -1913,7 +1913,9 @@ function dayVeTuong(o) {
   const that = o.t || .22;
   if (!state.plan || !camOrtho) return that;
   const nua = (camOrtho.top - camOrtho.bottom) / 2 / (camOrtho.zoom || 1);
-  return Math.max(that, nua / 28);
+  // Chi cong them cho du thay, KHONG duoc beo hon 1,6 lan be day that — neu
+  // khong ca mat bang toan net hong to tuong, khong con giong ban ve.
+  return Math.min(that * 1.6, Math.max(that, nua / 90));
 }
 
 function activeFloorObj() {
