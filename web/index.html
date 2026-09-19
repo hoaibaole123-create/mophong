@@ -47,6 +47,22 @@
   #info{position:absolute;right:14px;top:14px;width:280px;background:#11161deb;border:1px solid var(--line);
     border-radius:10px;padding:12px 14px;font-size:13px;display:none;backdrop-filter:blur(4px)}
   #info h3{margin:0 0 8px;font-size:14px}
+  /* Thẻ theo dõi kết quả kiểm tra phương tiện PCCC — in ra giấy nên nền trắng */
+  #info.the{width:380px;max-height:86vh;overflow:auto;background:#fbfbf8;color:#12161c;
+    border-color:#b9bcc2;padding:14px 16px}
+  #info.the .close{color:#5a6068}
+  .tpccc{font-family:"Times New Roman",Times,serif}
+  .tpccc h4{margin:0;text-align:center;font-size:15px;line-height:1.35;font-weight:700}
+  .tpccc .dong{margin:5px 0;font-size:13px;line-height:1.5}
+  .tpccc .dong b{font-weight:700}
+  .tpccc table{width:100%;border-collapse:collapse;margin-top:10px;font-size:12.5px}
+  .tpccc th,.tpccc td{border:1px solid #2b2f36;padding:4px 5px;text-align:center;height:22px}
+  .tpccc th{font-weight:700;line-height:1.25}
+  .tpccc td.ng{width:34%;white-space:nowrap}
+  .tpccc input{width:100%;border:0;background:transparent;font:inherit;color:inherit;
+    text-align:center;outline:none}
+  .tpccc input:focus{background:#fff3c4}
+  .tpccc .ghi{margin-top:9px;font-size:11px;color:#5a6068;text-align:right}
   #info .k{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.05em}
   #info .v{margin-bottom:7px}
   #info .close{position:absolute;right:8px;top:6px;cursor:pointer;color:var(--muted)}
@@ -243,7 +259,6 @@
           <button id="massing" class="pri">Tường / sàn</button>
           <button id="exitBtn" class="pri">Đèn EXIT</button>
           <button id="cab" class="pri">Tủ, thiết bị</button>
-          <button id="maso">Mã số thiết bị (đang tắt)</button>
           <button id="plan2d">Bản vẽ mặt bằng (đang tắt)</button>
           <button id="paper">Nền giấy trắng</button>
           <button id="frame" class="pri">Khung bao khối (tab Thiết kế)</button>
@@ -281,7 +296,7 @@
 <script type="importmap">
 { "imports": { "three": "./vendor/three.module.js" } }
 </script>
-<script type="module" src="./app.js?v=1789821953"></script>
+<script type="module" src="./app.js?v=1789822414"></script>
 <div id="wkHud" style="display:none;position:fixed;left:50%;bottom:26px;transform:translateX(-50%);
      background:rgba(16,21,28,.88);border:1px solid #2b3540;border-radius:10px;padding:10px 16px;
      color:#e6edf3;font:13px/1.5 system-ui;z-index:50;text-align:center;min-width:280px"></div>

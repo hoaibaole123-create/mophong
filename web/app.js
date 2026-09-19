@@ -81,8 +81,7 @@ const markerGroup = new THREE.Group();
 const massGroup = new THREE.Group();
 const customGroup = new THREE.Group();
 const exitGroup = new THREE.Group();
-const maSoGroup = new THREE.Group();
-scene.add(floorGroup, massGroup, customGroup, markerGroup, exitGroup, maSoGroup);
+scene.add(floorGroup, massGroup, customGroup, markerGroup, exitGroup);
 
 const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
@@ -1787,29 +1786,17 @@ function maCuaVat(o, f, n) {
   return null;
 }
 
-function dungMaSo() {
-  maSoGroup.traverse(o => { if (o.material) o.material.dispose(); });
-  maSoGroup.clear();
-  if (!state.maSo) return;
-  const cao = 1.15 * state.explode;
-  for (const m of markers) {                      // binh boc tu ban ve
-    if (!m.visible) continue;
-    const sp = theMaSo(m.userData.item.id);
-    sp.position.set(m.position.x, m.position.y + cao, m.position.z);
-    maSoGroup.add(sp);
-  }
+function ganMaSo() {
+  // Danh ma cho cac vat tu ve theo tung cao trinh, cat vao mesh de khi bam
+  // vao thi hien ra. KHONG treo the noi tren dau vat.
   const dem = {};
-  for (const mesh of customMeshes) {              // hong nuoc, nut an, binh tu ve
+  for (const mesh of customMeshes) {
     const o = mesh.userData.obj;
     if (!o || !['hong', 'nutbao', 'bin', 'fm200'].includes(o.type)) continue;
-    if (!mesh.visible) continue;
-    const f = floorOf(mesh.userData.page ?? state.data.floors[0].page);
-    dem[o.type + f.page] = (dem[o.type + f.page] || 0) + 1;
-    const ma = maCuaVat(o, f, dem[o.type + f.page]);
-    if (!ma) continue;
-    const sp = theMaSo(ma);
-    sp.position.set(mesh.position.x, mesh.position.y + (o.type === 'hong' ? 0.75 : 0.35), mesh.position.z);
-    maSoGroup.add(sp);
+    const page = mesh.userData.page ?? state.data.floors[0].page;
+    const k = o.type + page;
+    dem[k] = (dem[k] || 0) + 1;
+    mesh.userData.maSo = maCuaVat(o, floorOf(page), dem[k]);
   }
 }
 
@@ -1859,7 +1846,6 @@ function applyVisibility() {
     m.traverse(o => { if (o.userData.khung) o.visible = state.frame && state.mode === 'design'; });
   });
   if (typeof rebuildCustom === 'function') rebuildCustom();
-  dungMaSo();                                   // thẻ mã số bám theo vật đang hiện
   renderSidebarCounts();
 }
 
@@ -2344,6 +2330,7 @@ function rebuildCustom() {
       customMeshes.push(mesh);
     }
   }
+  ganMaSo();                                   // đánh mã cho vật tự vẽ
   renderDesignList();
 }
 
@@ -4626,19 +4613,96 @@ function renderSidebarCounts() {
 
 function showInfo(it) {
   const f = floorOf(it.floor), t = state.data.types[it.type];
-  const s = mpp();
+  const sM = mpp();
   const pos = f.georef === 'standalone'
-    ? `X ${viTriBinh(it)[0].toFixed(1)} m · Y ${viTriBinh(it)[1].toFixed(1)} m (gốc: giữa nhà van)`
-    : `X ${(viTriBinh(it)[0] * s).toFixed(1)} m · Y ${(viTriBinh(it)[1] * s).toFixed(1)} m (gốc: giữa tim M1–M2)`;
-  $('#infobody').innerHTML = `
-    <h3><span class="dot" style="background:${t.color};display:inline-block"></span> ${it.id}</h3>
-    <div class="k">Loại</div><div class="v">${t.label}</div>
-    <div class="k">Cao trình</div><div class="v">${f.name}</div>
-    <div class="k">Khu vực / phòng</div><div class="v">${it.room || '—'}</div>
-    <div class="k">Toạ độ mặt bằng</div><div class="v">${pos}</div>
-    <div class="k">Nguồn</div><div class="v">Trang ${f.page + 1} của bản vẽ</div>`;
-  $('#info').style.display = 'block';
+    ? `X ${viTriBinh(it)[0].toFixed(1)} m · Y ${viTriBinh(it)[1].toFixed(1)} m`
+    : `X ${(viTriBinh(it)[0] * sM).toFixed(1)} m · Y ${(viTriBinh(it)[1] * sM).toFixed(1)} m`;
+  veTheKiemTra('i:' + it.id, f.page, TEN_PT[it.type] || t.label,
+    kyMaHieu(it.type, f, it.id),
+    f.name + (it.room ? ' · ' + it.room : '') + ' — ' + pos);
 }
+
+// ---------------------------------------------------------------------------
+// THE THEO DOI KET QUA KIEM TRA PHUONG TIEN PCCC
+// Bam vao mot thiet bi -> hien dung mau the treo tren binh ngoai thuc te:
+// ten phuong tien, ky ma hieu, so seri, ngay dua vao su dung va bang 12 thang
+// ghi ket qua kiem tra. Phan nguoi dung dien duoc luu theo tung thiet bi.
+// ---------------------------------------------------------------------------
+function theOf(page) {
+  const e = editsOf(page);
+  e.the = e.the || {};
+  return e.the;
+}
+
+const TEN_PT = {
+  ABC8: 'Bình Bột', CO25: 'Bình CO₂', CO224: 'Bình CO₂ xe đẩy', CO2: 'Bình CO₂',
+  HONG: 'Họng nước', NUTBAO: 'Nút ấn báo cháy',
+  hong: 'Họng nước vách tường', nutbao: 'Nút ấn báo cháy', fm200: 'Bình khí FM-200'
+};
+const VIET_TAT = { ABC8: 'BỘT', CO25: 'CO2', CO224: 'CO2', CO2: 'CO2', HONG: 'HCC',
+                   NUTBAO: 'NA', hong: 'HCC', nutbao: 'NA', fm200: 'FM200', bin: 'BỘT' };
+
+// Ky ma hieu theo mau cua don vi: <LOAI>-▼<cao trinh>-<ma thiet bi>
+function kyMaHieu(loai, f, ma) {
+  const el = (f.elevation || 0).toFixed(2).replace('.', ',');
+  const vt = VIET_TAT[loai] || 'PT';
+  // Ma cua vat tu ve da mang san tien to (HCC-01-01) -> bo di cho khoi lap lai
+  const so = String(ma || '').replace(new RegExp('^' + vt + '-', 'i'), '');
+  return vt + '-▼' + el + ' -' + so;
+}
+
+function veTheKiemTra(khoa, page, tenPT, ky, ghiChu) {
+  const kho = theOf(page);
+  const d = kho[khoa] || (kho[khoa] = { seri: '', ngaySD: '', hang: [] });
+  const nam = new Date().getFullYear();
+  let h = '<div class="tpccc"><h4>THẺ THEO DÕI KẾT QUẢ KIỂM TRA<br>PHƯƠNG TIỆN PCCC</h4>';
+  h += '<div class="dong">- Tên phương tiện: <b>' + tenPT + '</b></div>';
+  h += '<div class="dong">- Ký mã hiệu: <b>' + ky + '</b> Số Seri: ' +
+       '<input data-o="seri" value="' + (d.seri || '') + '" style="text-align:left;width:38%"></div>';
+  h += '<div class="dong">- Ngày, tháng, năm đưa vào sử dụng: ' +
+       '<input data-o="ngaySD" value="' + (d.ngaySD || '') + '" style="text-align:left;width:40%" placeholder="dd/mm/yyyy"></div>';
+  h += '<table><tr><th>Ngày, tháng<br>kiểm tra</th><th>Kết quả<br>kiểm tra</th>' +
+       '<th>Người, đơn vị<br>kiểm tra</th></tr>';
+  for (let i = 0; i < 12; i++) {
+    const r = d.hang[i] || {};
+    const thang = String(i + 1).padStart(2, '0');
+    h += '<tr><td class="ng">….../' + thang + '/' + nam +
+         '<input data-h="' + i + '" data-o="ngay" value="' + (r.ngay || '') +
+         '" style="width:0;height:0;position:absolute;opacity:0"></td>' +
+         '<td><input data-h="' + i + '" data-o="kq" value="' + (r.kq || '') + '"></td>' +
+         '<td><input data-h="' + i + '" data-o="nguoi" value="' + (r.nguoi || '') + '"></td></tr>';
+  }
+  h += '</table>';
+  if (ghiChu) h += '<div class="ghi">' + ghiChu + '</div>';
+  h += '</div>';
+  $('#infobody').innerHTML = h;
+  $('#info').classList.add('the');
+  $('#info').style.display = 'block';
+  $('#infobody').querySelectorAll('input').forEach(inp => {
+    inp.oninput = () => {
+      const i = inp.dataset.h, o = inp.dataset.o;
+      if (i === undefined) d[o] = inp.value;
+      else { d.hang[i] = d.hang[i] || {}; d.hang[i][o] = inp.value; }
+      saveEdits();
+    };
+  });
+}
+
+// The thong tin cho VAT TU VE (hong nuoc, nut an, binh tu ve, FM-200).
+const TEN_LOAI_VE = { hong: 'Họng lấy nước chữa cháy', nutbao: 'Nút ấn báo cháy',
+                      bin: 'Bình chữa cháy xách tay', fm200: 'Bình khí FM-200' };
+function showInfoVe(mesh) {
+  const o = mesh.userData.obj;
+  const f = floorOf(mesh.userData.page ?? state.data.floors[0].page);
+  const sM = mpp();
+  const ten = o.type === 'bin' ? (TEN_PT[o.binh || 'ABC8'] || 'Bình chữa cháy')
+                               : (TEN_PT[o.type] || o.name);
+  const loai = o.type === 'bin' ? (o.binh || 'ABC8') : o.type;
+  const ma = mesh.userData.maSo || o.id;
+  veTheKiemTra('c:' + o.id, f.page, ten, kyMaHieu(loai, f, ma),
+    f.name + ' — X ' + (o.u0 * sM).toFixed(1) + ' m · Y ' + (o.v0 * sM).toFixed(1) + ' m');
+}
+
 
 // ---------------------------------------------------------------- events
 function onPointer(ev, click) {
@@ -4648,6 +4712,30 @@ function onPointer(ev, click) {
   raycaster.setFromCamera(pointer, camera);
   const hits = raycaster.intersectObjects(markers.filter(m => m.visible), true);
   const tip = $('#tip');
+  if (!hits.length) {
+    // Bam vao HONG NUOC / NUT AN / binh tu ve cung phai ra ma so, khong chi binh
+    // boc tu ban ve. Cac vat nay nam trong customMeshes chu khong phai markers.
+    const dsVe = customMeshes.filter(m => m.visible && m.userData.obj &&
+      ['hong', 'nutbao', 'bin', 'fm200'].includes(m.userData.obj.type));
+    const h2 = raycaster.intersectObjects(dsVe, true);
+    if (h2.length) {
+      let o = h2[0].object;
+      while (o && !o.userData.obj) o = o.parent;
+      if (o) {
+        const ob = o.userData.obj;
+        const loai = ob.type === 'bin' ? (TEN_BINH[ob.binh || 'ABC8'] || TEN_LOAI_VE.bin)
+                                       : TEN_LOAI_VE[ob.type];
+        if (click) { state.selected = null; showInfoVe(o); applyVisibility(); }
+        tip.style.display = 'block';
+        tip.style.left = (ev.clientX - r.left + 14) + 'px';
+        tip.style.top = (ev.clientY - r.top + 12) + 'px';
+        tip.innerHTML = `<b>${o.userData.maSo || ob.name}</b> — ${loai}<br>` +
+          floorOf(o.userData.page ?? state.data.floors[0].page).name;
+        renderer.domElement.style.cursor = 'pointer';
+        return;
+      }
+    }
+  }
   if (hits.length) {
     let o = hits[0].object; while (o && !o.userData.item) o = o.parent;
     const it = o.userData.item, f = floorOf(it.floor);
@@ -4666,7 +4754,10 @@ function onPointer(ev, click) {
 }
 renderer.domElement.addEventListener('pointermove', e => { if (state.mode === 'view') onPointer(e, false); });
 renderer.domElement.addEventListener('click', e => { if (state.mode === 'view') onPointer(e, true); });
-$('#infoclose').onclick = () => { $('#info').style.display = 'none'; state.selected = null; applyVisibility(); };
+// Rê chuột ra khỏi khung 3D (ví dụ sang đọc thẻ) thì tắt chú thích bay, nếu
+// không nó nằm đè lên thẻ theo dõi.
+renderer.domElement.addEventListener('pointerleave', () => { $('#tip').style.display = 'none'; });
+$('#infoclose').onclick = () => { $('#info').style.display = 'none'; $('#info').classList.remove('the'); state.selected = null; applyVisibility(); };
 
 $('#q').oninput = e => { state.query = e.target.value; applyVisibility(); };
 $('#explode').oninput = e => { state.explode = +e.target.value; $('#expv').textContent = state.explode.toFixed(1); relayout(); };
@@ -4687,13 +4778,6 @@ $('#massing').onclick = e => {
   state.massing = !state.massing;
   e.target.classList.toggle('pri', state.massing);
   applyVisibility();
-};
-$('#maso').onclick = e => {
-  state.maSo = !state.maSo;
-  e.target.classList.toggle('pri', state.maSo);
-  e.target.textContent = state.maSo ? 'Mã số thiết bị' : 'Mã số thiết bị (đang tắt)';
-  try { localStorage.setItem(khoaKho('maSo'), state.maSo ? '1' : '0'); } catch (err) { }
-  dungMaSo(); window.veLai(2);
 };
 $('#plan2d').onclick = e => {
   state.showPlan = !state.showPlan;
@@ -4856,7 +4940,6 @@ fetch(duongDL('plant.json?v=') + Date.now()).then(r => r.json()).then(d => {
   state.data = d;
   state.unitM = +(localStorage.getItem(khoaKho('unitM')) || d.default_unit_spacing_m);
   state.showPlan = localStorage.getItem(khoaKho('showPlan')) === '1';   // mặc định tắt
-  state.maSo = localStorage.getItem(khoaKho('maSo')) === '1';          // mặc định tắt
   $('#calib').value = state.unitM;
   state.visible = new Set(d.floors.map(f => f.page));
   state.typeOn = new Set(Object.keys(d.types));
@@ -4892,11 +4975,6 @@ fetch(duongDL('plant.json?v=') + Date.now()).then(r => r.json()).then(d => {
   initDesign();
   resize();
   fitAll();
-  const bMa = $('#maso');
-  if (bMa) {
-    bMa.classList.toggle('pri', state.maSo);
-    bMa.textContent = state.maSo ? 'Mã số thiết bị' : 'Mã số thiết bị (đang tắt)';
-  }
   const bPlan = $('#plan2d');
   if (bPlan) {
     bPlan.classList.toggle('pri', state.showPlan);
