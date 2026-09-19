@@ -32,7 +32,8 @@ FLOORS = [
     (7,  "EL. 298.30 — Sàn buồng xoắn",            298.30, ""),
     (8,  "EL. 292.70 — Sàn ống hút",               292.70, ""),
     (9,  "EL. 288.65 — Sàn đáy ống hút",           288.65, ""),
-    (10, "EL. 521.25 — Nhà van cửa nhận nước", 521.25, "Công trình riêng, tách khỏi nhà máy"),
+    # Trang 10 (EL. 521.25 — Nhà van cửa nhận nước) đã bỏ khỏi mô hình theo yêu cầu:
+    # cửa nhận nước được dựng bên bộ dữ liệu NHÀ MÁY IALY (khu "Cửa nhận nước").
 ]
 
 # cong trinh rieng: pt tren mot met (do tu duong kich thuoc 16200 mm) va goc toa do

@@ -81,6 +81,14 @@ def tenTrang(page, i):
     return ten
 
 
+# Ten hien thi + cao trinh dat tay cho vai khu. Ma so thiet bi VAN tinh tu ten
+# goc ("CNN IALY MR") nen doi ten o day khong lam doi id, the kiem tra da dien
+# cua tung binh khong mat.
+DOI_TEN = {
+    "CNN IALY MR": ("EL. 521 — Cửa nhận nước MR", 521.0),
+}
+
+
 def caoTrinh(ten, thuTu):
     """Cao trinh tu ten. Nha PK xep deu 4 m mot tang, cong trinh rieng xep ke tiep."""
     m = re.match(r"^EL\. (\d{3})", ten)
@@ -152,8 +160,9 @@ def main():
 
         ten = a["ten"]
         ma = re.sub(r"[^A-Z0-9]", "", ten.upper())[:6] or ("KV%02d" % k)
+        hien, cao = DOI_TEN.get(ten, (ten, caoTrinh(ten, k)))
         floors.append({
-            "page": k, "name": ten, "elevation": caoTrinh(ten, k),
+            "page": k, "name": hien, "elevation": cao,
             "note": "", "image": anh, "georef": "unit-axis", "scale": 1.0,
             "box": [round(-nua_w, 1), round(-nua_h, 1), round(nua_w, 1), round(nua_h, 1)],
             "footprint": [round(-nua_w, 1), round(-nua_h, 1), round(nua_w, 1), round(nua_h, 1)],
