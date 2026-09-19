@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta http-equiv="Cache-Control" content="no-cache">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Mô phỏng 3D vị trí bình chữa cháy — Thuỷ điện Ialy mở rộng</title>
+<title>Sơ đồ chỉ dẫn thoát nạn và bố trí phương tiện PCCC & CNCH VHIALY </title>
 <style>
   :root{
     --bg:#0e1116; --panel:#161b22; --panel2:#1c232c; --line:#2b3441;
@@ -108,7 +108,7 @@
 <div id="app">
   <aside id="side">
     <header>
-      <h1>Bình chữa cháy — Ialy mở rộng
+      <h1>Sơ đồ chỉ dẫn thoát nạn và bố trí phương tiện PCCC & CNCH VHIALY
         <span id="collapse" style="float:right;cursor:pointer;color:#9aa7b4" title="Thu gọn">⟨⟨</span></h1>
       <div class="sub" id="hdrsub"></div>
     </header>
@@ -200,9 +200,6 @@
         <div id="dlist"></div>
         <div class="btns" style="margin-top:8px">
           <button id="dDel" class="pri">🗑 Xoá đối tượng đang chọn</button>
-          <button id="dGopSan">🔗 Nối 2 sàn gần nhất</button>
-          <button id="dDonSan">🧹 Dọn mép sàn</button>
-          <button id="dKhit">🔗 Làm khít góc tường</button>
           <button id="dUndo">↶ Hoàn tác</button>
           <button id="dFloorDown">⤓ Hạ cao trình này về sàn</button>
           <button id="dClear">Xoá cao trình này</button>
@@ -281,16 +278,7 @@
         </div>
       </div>
 
-      <div class="sec">
-        <h2>Hiệu chỉnh tỉ lệ</h2>
-        <label class="lbl">Khoảng cách tim tổ máy M1–M2 (m)</label>
-        <input type="number" id="calib" step="0.1" min="5" max="60">
-        <div class="sub" style="margin-top:6px">
-          Bản vẽ không ghi kích thước nên tỉ lệ mét được suy ra từ khoảng cách này.
-          Nhập số thực tế để mọi khoảng cách hiển thị đúng. Vị trí tương đối của các
-          bình không phụ thuộc giá trị này.
-        </div>
-      </div>
+     
 
       <div class="sec" id="notes"></div>
     </div>
@@ -309,7 +297,7 @@
 <script type="importmap">
 { "imports": { "three": "./vendor/three.module.js" } }
 </script>
-<script type="module" src="./app.js?v=1789825856"></script>
+<script type="module" src="./app.js?v=1789826627"></script>
 <div id="wkHud" style="display:none;position:fixed;left:50%;bottom:26px;transform:translateX(-50%);
      background:rgba(16,21,28,.88);border:1px solid #2b3540;border-radius:10px;padding:10px 16px;
      color:#e6edf3;font:13px/1.5 system-ui;z-index:50;text-align:center;min-width:280px"></div>

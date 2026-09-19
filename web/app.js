@@ -423,15 +423,39 @@ function vlNutBao() {
 
 // Nut bao gan tuong: quay mat ra phia phong, ap lung vao tuong gan nhat.
 // Chua ve tuong thi de mac dinh huong +Z.
-function xoayNutBao(g, f, x, z) {
-  if (typeof tuongGanNhat !== 'function') return;
+// Ap mot vat vao BUC TUONG GAN NHAT va quay mat no huong ra ngoai phong.
+// lui = khoang cach tu mat tuong ra tam vat.
+function apVaoTuong(g, f, x, z, lui) {
+  if (typeof tuongGanNhat !== 'function') return false;
   const t = tuongGanNhat(f, x, z);
-  if (!t || t.d > 4) return;
+  if (!t || t.d > 4) return false;
   const nx = -t.uz, nz = t.ux;
   const ben = ((x - t.x) * nx + (z - t.z) * nz) >= 0 ? 1 : -1;
-  g.position.x = t.x + nx * ben * (t.day / 2 + .05);
-  g.position.z = t.z + nz * ben * (t.day / 2 + .05);
+  g.position.x = t.x + nx * ben * (t.day / 2 + lui);
+  g.position.z = t.z + nz * ben * (t.day / 2 + lui);
   g.rotation.y = -Math.atan2(t.uz, t.ux) + (ben < 0 ? Math.PI : 0);
+  return true;
+}
+
+function xoayNutBao(g, f, x, z) { apVaoTuong(g, f, x, z, .05); }
+
+// Binh chua chay XACH TAY duoc treo tren gia gan tuong, day binh cach san
+// khoang 40 cm. Binh xe day (CO224) dung duoi san, binh khi FM-200 la cum
+// chai co dinh nen ca hai deu khong treo.
+const CAO_TREO_BINH = 0.40;
+const LOAI_TREO = ['ABC8', 'CO25', 'CO2'];
+let MAT_GIA_BINH = null;
+function treoBinhLenTuong(g, f, x, z, loai, ySan) {
+  if (!LOAI_TREO.includes(loai)) return;
+  // ban kinh binh ~0,10 m -> lui 0,14 m de vo binh vua cham mat tuong
+  if (!apVaoTuong(g, f, x, z, .14)) return;   // khong co tuong -> cu de duoi san
+  g.position.y = ySan + CAO_TREO_BINH;
+  MAT_GIA_BINH = MAT_GIA_BINH || new THREE.MeshStandardMaterial(
+    { color: 0x8d9aa6, roughness: .6, metalness: .5 });
+  // gia do: mot ban thep ap tuong sau lung binh
+  const gia = new THREE.Mesh(new THREE.BoxGeometry(.24, .10, .03), MAT_GIA_BINH);
+  gia.position.set(0, .30, -.13);
+  g.add(gia);
 }
 
 function makeNutBao(chon) {
@@ -1769,6 +1793,7 @@ function buildScene() {
     const g = makeMarker(it.type, mat);
     g.position.set(x, floorY(f) + .05, z);
     if (it.type === 'NUTBAO') xoayNutBao(g, f, x, z);
+    else treoBinhLenTuong(g, f, x, z, it.type, floorY(f));
     g.userData.item = it;
     g.userData.mat = mat;
     markerGroup.add(g); markers.push(g);
@@ -2211,6 +2236,7 @@ function rebuildCustom() {
         const lb = o.binh || 'ABC8';
         mesh = makeMarker(lb, lb === 'CO224' ? MAT_BINH_CO224 : MAT_BINH_THEM);
         mesh.position.set(ax, y + .05, az);
+        treoBinhLenTuong(mesh, f, ax, az, lb, y);
         mesh.scale.setScalar(state.mkScale * (state.sel === 'c:' + o.id ? 1.8 : 1));
       } else {
         const h = (o.type === 'wall')
@@ -4825,7 +4851,9 @@ $('#q').oninput = e => { state.query = e.target.value; applyVisibility(); };
 $('#explode').oninput = e => { state.explode = +e.target.value; $('#expv').textContent = state.explode.toFixed(1); relayout(); };
 $('#mksize').oninput = e => { state.mkScale = +e.target.value; $('#mkv').textContent = state.mkScale.toFixed(1); applyVisibility(); };
 $('#opacity').oninput = e => { state.opacity = +e.target.value; applyVisibility(); };
-$('#calib').onchange = e => {
+// O "Hieu chinh ti le" co the bi go khoi trang; thieu no thi bo qua, dung de
+// mot phan tu vang mat lam dut ca doan khoi tao phia sau.
+if ($('#calib')) $('#calib').onchange = e => {
   state.unitM = Math.max(5, +e.target.value || 22);
   localStorage.setItem(khoaKho('unitM'), state.unitM);
   relayout();
@@ -5002,7 +5030,7 @@ fetch(duongDL('plant.json?v=') + Date.now()).then(r => r.json()).then(d => {
   state.data = d;
   state.unitM = +(localStorage.getItem(khoaKho('unitM')) || d.default_unit_spacing_m);
   state.showPlan = localStorage.getItem(khoaKho('showPlan')) === '1';   // mặc định tắt
-  $('#calib').value = state.unitM;
+  if ($('#calib')) $('#calib').value = state.unitM;
   state.visible = new Set(d.floors.map(f => f.page));
   state.typeOn = new Set(Object.keys(d.types));
   fetch(duongDL('lines.json?v=') + Date.now())
@@ -7252,3 +7280,4 @@ if (btnKhit) btnKhit.onclick = () => lamKhitGoc(activeFloorObj());
 
 const btnWalk = document.querySelector('#walk');
 if (btnWalk) btnWalk.onclick = function () { if (wk.on) raDiBo(); else vaoDiBo(); };
+
