@@ -4880,13 +4880,52 @@ const TEN_PT = {
 const VIET_TAT = { ABC8: 'BỘT', CO25: 'CO2', CO224: 'CO2', CO2: 'CO2', HONG: 'HCC',
                    NUTBAO: 'NA', hong: 'HCC', nutbao: 'NA', fm200: 'FM200', bin: 'BỘT' };
 
-// Ky ma hieu theo mau cua don vi: <LOAI>-▼<cao trinh>-<ma thiet bi>.
-// Rieng thiet bi CO TEN IN SAN TREN BAN VE (HCC-GM05, CO2-61, THB7-FM200-B01)
-// thi giu nguyen ten do — day moi la ky ma hieu that cua don vi.
+// Ma khu viet tat, lay tu ten cao trinh khi ban ve khong ghi san.
+function maKhu(f) {
+  const t = (f.name || '').toUpperCase();
+  if (t.includes('GIAN BIẾN ÁP')) return 'BA';
+  if (t.includes('GIAN MÁY')) return 'GM';
+  if (t.includes('NHÀ PK')) return 'PK';
+  if (t.includes('CỬA NHẬN NƯỚC') || t.startsWith('CNN')) return 'CNN';
+  return (t.replace(/[^A-Z0-9]/g, '').slice(0, 4)) || 'KV';
+}
+
+// Tach mot ma in tren ban ve thanh {khu, so}: "HCC-GM07" -> GM/7,
+// "CO2-62" -> _/62, "THB7-FM200-B01" -> THB7/1, "B10" -> _/10.
+function bocMa(ma) {
+  const t = String(ma || '').toUpperCase();
+  const so = (t.match(/(\d+)\s*$/) || [])[1];
+  let khu = null;
+  let m = t.match(/^HCC-([A-Z]+)\d*$/);        // HCC-GM07, HCC-BA14, HCC-GBA
+  if (m) khu = m[1];
+  else if ((m = t.match(/^([A-Z0-9]+)-FM200/))) khu = m[1];   // THB7-FM200-B01
+  return { khu, so: so ? +so : null };
+}
+
+// Ky ma hieu.
+//
+// Nha may Ialy dung mau cua don vi: <LOAI>-▼<cao trinh>-<khu>-<so 3 chu so>-PX1
+// vi du CO2-▼292-GM-011-PX1. So thu tu lay nguyen tu ma da co (ma in tren ban
+// ve neu co, khong thi ma tu danh) — chi chen them phan cao trinh va khu.
+// Cao trinh nao ban ve khong ghi (cac cong trinh phu tro) thi bo doan ▼ di
+// chu khong bia ra mot con so khong co that.
+//
+// Ialy mo rong giu nguyen mau cu: <LOAI>-▼<cao trinh> -<ma>.
+const HAU_TO_NM = 'PX1';
 function kyMaHieu(loai, f, ma, veGoc) {
+  const vt = VIET_TAT[loai] || 'PT';
+  if (nhaMayDang === 'nm') {
+    const b = bocMa(ma);
+    const el = /^EL\.? ?\d/.test(f.name || '') ? Math.round(f.elevation) : null;
+    const phan = [vt];
+    if (el !== null) phan.push('▼' + el);
+    phan.push(b.khu || maKhu(f));
+    phan.push(b.so !== null ? String(b.so).padStart(3, '0') : '000');
+    phan.push(HAU_TO_NM);
+    return phan.join('-');
+  }
   if (veGoc) return String(ma);
   const el = (f.elevation || 0).toFixed(2).replace('.', ',');
-  const vt = VIET_TAT[loai] || 'PT';
   // Ma cua vat tu ve da mang san tien to (HCC-01-01) -> bo di cho khoi lap lai
   const so = String(ma || '').replace(new RegExp('^' + vt + '-', 'i'), '');
   return vt + '-▼' + el + ' -' + so;
