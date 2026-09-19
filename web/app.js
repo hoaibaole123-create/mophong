@@ -4342,8 +4342,6 @@ function initDesign() {
   }
   const h1 = document.querySelector('#side header h1');
   if (h1) h1.firstChild.nodeValue = 'Bình chữa cháy — ' + NM.ten + ' ';
-  const sub = $('#hdrsub');
-  if (sub && !sub.textContent.trim()) sub.textContent = NM.mo;
   document.title = NM.ten + ' — phương tiện PCCC';
   $('#tabView').onclick = () => setMode('view');
   $('#tabDesign').onclick = async () => { if (await xinMatKhauThietKe()) setMode('design'); };
@@ -4557,9 +4555,6 @@ function focusFloor(page, top = false) {
 // ---------------------------------------------------------------- sidebar
 function renderSidebar() {
   const d = state.data;
-  $('#hdrsub').innerHTML =
-    `${d.project}<br>Bản vẽ ${d.drawing} · ANDRITZ HYDRO / EVNPMB2<br>
-     Nguồn: <i>${d.source}</i>`;
 
   const types = $('#types'); types.innerHTML = '';
   for (const [code, t] of Object.entries(d.types)) {
@@ -4642,24 +4637,13 @@ function renderSidebar() {
     (chiaKhu ? oKhu[khuNha(f)].than : fl).appendChild(row);
   }
 
+  // Muc "Ghi chu" chi con cho canh bao cua ban ve; khong co canh bao thi an han.
   const notes = $('#notes');
-  notes.innerHTML = '<h2>Ghi chú</h2>';
-  if (d.warnings && d.warnings.length)
+  notes.innerHTML = '';
+  if (d.warnings && d.warnings.length) {
+    notes.innerHTML = '<h2>Ghi chú</h2>';
     notes.appendChild(el('div', 'warn', d.warnings.join('<br>')));
-  notes.appendChild(el('div', 'sub',
-    `Các phòng được bảo vệ bằng hệ thống khí FM-200 (theo bản vẽ 12323.pdf):<br>` +
-    FM200.map(r => `• ${r[0]} — ${r[1]} (EL ${r[2].toFixed(2)})`).join('<br>')));
-  notes.appendChild(el('div', 'sub',
-    '<br><b>Cách phân biệt khi dựng 3D:</b><br>' +
-    '• <span style="color:#c8d6e2">Tường</span> — dải hai nét song song CÓ gạch chéo bên trong ' +
-    '(khối xây / bê tông), hoặc dải rất thon dài (vách ngăn) → dựng cao hết tầng.<br>' +
-    '• <span style="color:#7fb6d6">Tủ, thiết bị</span> — hình chữ nhật rỗng ruột, mập, không gạch ' +
-    'chéo → dựng thành khối cao 2,0 m, màu xanh thép.<br>' +
-    '• <span style="color:#f0a84a">Cửa ra vào</span> — từ cung quay cánh cửa: bản lề là giao hai ' +
-    'tiếp tuyến, cánh tay nằm trên tường cho bề rộng ô cửa, cánh tay còn lại cho hướng mở. ' +
-    'Ô cửa được khoét thủng tường, chừa lanh tô, và dựng cánh cửa cao 2,05 m đúng chiều mở.'));
-  notes.appendChild(el('div', 'sub', '<br>Nhà van cửa nhận nước (EL 521.25) là công trình riêng, ' +
-    'được đặt tách sang một bên và phía trên nhà máy để dễ quan sát.'));
+  }
 }
 
 // Khu nha cua mot cao trinh. Thu tu tra ve cung la thu tu hien trong danh sach
