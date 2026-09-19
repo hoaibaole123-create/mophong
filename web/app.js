@@ -3950,10 +3950,13 @@ function designDown(ev) {
                   h: 0, name: TEN_BINH[loai] + ' ' + n });
     return;
   }
-  if (state.tool === 'cong') {              // tường cong: giữ chuột rồi rê theo đường muốn vẽ
-    veTay.on = true; veTay.id = ev.pointerId; veTay.f = p.f; veTay.pts = [[p.x, p.z]];
-    controls.enabled = false;
-    hint('Rê chuột theo đường muốn vẽ — thả ra là xong (Esc để huỷ)');
+  if (state.tool === 'cong') {              // tường cong: bấm từng mốc, máy tự bo cong
+    if (!veTay.on) { veTay.on = true; veTay.f = p.f; veTay.pts = []; controls.enabled = false; }
+    const d0 = veTay.pts.length ? Math.hypot(p.x - veTay.pts[0][0], p.z - veTay.pts[0][1]) : 9;
+    if (veTay.pts.length >= 3 && d0 < .8) { veTayChot(true); return; }   // bấm lại mốc đầu -> khép kín
+    veTay.pts.push([p.x, p.z]); veTay.tam = null; veTayVe();
+    hint('Đã có ' + veTay.pts.length + ' mốc — bấm tiếp trên đường cong; Enter để kết thúc,' +
+         ' bấm lại mốc đầu để khép kín, Backspace bỏ mốc cuối, Esc huỷ');
     return;
   }
   if (ev.target !== renderer.domElement) return;
@@ -4115,15 +4118,7 @@ function dgChot() {
 function designMove(ev) {
   if (state.mode !== 'design') return;
   if (mv.on) { doMove(ev); return; }
-  if (veTay.on) {
-    const q = pickOnFloor(ev);
-    if (!q) return;
-    const c = veTay.pts[veTay.pts.length - 1];
-    // gom thua diem thi net rung; 0,25 m mot diem la du min
-    if (Math.hypot(q.x - c[0], q.z - c[1]) < .25) return;
-    veTay.pts.push([q.x, q.z]); veTayVe();
-    return;
-  }
+  if (veTay.on) { const q = pickOnFloor(ev); if (q) { veTay.tam = [q.x, q.z]; veTayVe(); } return; }
   if (dg.on) { const q = pickOnFloor(ev); if (q) { dg.tam = [q.x, q.z]; dgVe(); } return; }
   if (!drag.on) return;                     // bóng xem trước bám con trỏ dù không giữ chuột
   let p = pickOnFloor(ev);
@@ -4135,7 +4130,6 @@ function designMove(ev) {
 
 function designUp(ev) {
   if (state.mode !== 'design') return;
-  if (veTay.on) { veTayChot(); return; }
   if (mv.on) {
     const laDen = !!mv.den, laBinh = !!mv.binh;
     mv.on = false; mv.obj = null; mv.den = null; mv.binh = null; controls.enabled = true;
@@ -4153,45 +4147,91 @@ function designUp(ev) {
 }
 
 // ---------------------------------------------------------------------------
-// TUONG CONG — ve tu do theo net chuot. Nha PK cua Ialy mat bang hinh tron
-// nen tuong bao khong the ghep bang cac doan thang ke tay. Giu chuot roi re
-// theo duong muon ve; tha chuot la xong. Ket thuc gan cho bat dau thi tuyen
-// tu khep kin thanh vong.
+// TUONG CONG — bam tung DIEM MOC, duong cong tu chay muot qua cac moc do.
+// Nha PK cua Ialy mat bang hinh tron nen tuong bao khong ghep bang doan thang
+// duoc; con re chuot thi tay khong bao gio ra duong tron deu. Nen: bam vai
+// diem tren duong muon ve, may noi chung lai bang duong cong Catmull-Rom roi
+// chia thanh cac DOAN TUONG THANG ngan (~0,5 m).
 //
-// Net chuot duoc loc bot diem (Douglas-Peucker) roi dung thanh cac DOAN TUONG
-// THANG noi tiep. Nho vay dung tuong khi di bo, treo binh len tuong, khoet o
-// cua, net tuong tren mat bang 2D deu chay dung ngay — khong phai viet rieng
-// cho tuong cong. Cac doan mang chung mot ma nhom nen xoa mot doan la di ca
-// tuyen.
-const veTay = { on: false, id: null, f: null, pts: [] };
+// Vi ket qua van la tuong thuong nen dung tuong khi di bo, treo binh len tuong,
+// khoet o cua, net tuong tren mat bang 2D deu chay dung ngay. Cac doan mang
+// chung mot ma nhom nen xoa mot doan la di ca tuyen.
+const veTay = { on: false, f: null, pts: [], tam: null };
 let veTayGhost = null;
 
-// Giu lai dang cua net, bo cac diem gan nhu nam tren duong thang (Douglas-Peucker).
-function locDiem(pts, dung) {
-  if (pts.length < 3) return pts.slice();
-  const [ax, az] = pts[0], [bx, bz] = pts[pts.length - 1];
-  const dx = bx - ax, dz = bz - az, L = Math.hypot(dx, dz);
-  let xa = -1, k = -1;
-  for (let i = 1; i < pts.length - 1; i++) {
-    const [x, z] = pts[i];
-    const d = L < 1e-6 ? Math.hypot(x - ax, z - az)
-                       : Math.abs((x - ax) * dz - (z - az) * dx) / L;
-    if (d > xa) { xa = d; k = i; }
+// Cac moc co cung nam tren MOT DUONG TRON khong? Tra ve {x, z, r} neu co.
+// Nha tron nhu nha PK chi can bam vai moc tren tuong bao, con lai de may lo.
+function vongTronQua(pts) {
+  const n = pts.length;
+  if (n < 3) return null;
+  // khop tam bang binh phuong toi thieu: tam cach deu moi moc nhat
+  let sx = 0, sz = 0;
+  for (const q of pts) { sx += q[0]; sz += q[1]; }
+  let cx = sx / n, cz = sz / n;
+  for (let lap = 0; lap < 60; lap++) {        // Landau: lap la hoi tu rat nhanh
+    let mx = 0, mz = 0, mr = 0;
+    for (const q of pts) {
+      const dx = q[0] - cx, dz = q[1] - cz, d = Math.hypot(dx, dz);
+      if (d < 1e-9) return null;
+      mr += d; mx += dx / d; mz += dz / d;
+    }
+    mr /= n;
+    const nx = sx / n - mr * (mx / n), nz = sz / n - mr * (mz / n);
+    if (Math.hypot(nx - cx, nz - cz) < 1e-7) { cx = nx; cz = nz; break; }
+    cx = nx; cz = nz;
   }
-  if (xa <= dung) return [pts[0], pts[pts.length - 1]];
-  return locDiem(pts.slice(0, k + 1), dung)
-    .slice(0, -1).concat(locDiem(pts.slice(k), dung));
+  let r = 0;
+  for (const q of pts) r += Math.hypot(q[0] - cx, q[1] - cz);
+  r /= n;
+  if (r < .3) return null;
+  for (const q of pts)                        // lech qua 3% thi khong phai vong tron
+    if (Math.abs(Math.hypot(q[0] - cx, q[1] - cz) - r) / r > .03) return null;
+  return { x: cx, z: cz, r };
+}
+
+// Duong cong muot di qua het cac moc.
+function duongCong(pts, kin) {
+  if (pts.length < 2) return pts.slice();
+  if (pts.length === 2 && !kin) return pts.slice();
+  // Cac moc nam tren mot vong tron -> ve dung vong tron do. Duong Catmull-Rom
+  // qua 4 moc cua mot vong tron bi vong vao trong hon 10%, nha tron se meo.
+  if (kin) {
+    const v = vongTronQua(pts);
+    if (v) {
+      const n = Math.max(24, Math.min(400, Math.round(2 * Math.PI * v.r / 0.5)));
+      const g0 = Math.atan2(pts[0][1] - v.z, pts[0][0] - v.x);
+      // giu dung chieu nguoi dung bam
+      const g1 = Math.atan2(pts[1][1] - v.z, pts[1][0] - v.x);
+      let d = g1 - g0;
+      while (d > Math.PI) d -= 2 * Math.PI;
+      while (d < -Math.PI) d += 2 * Math.PI;
+      const chieu = d >= 0 ? 1 : -1;
+      const ra = [];
+      for (let i = 0; i <= n; i++) {
+        const g = g0 + chieu * 2 * Math.PI * i / n;
+        ra.push([v.x + v.r * Math.cos(g), v.z + v.r * Math.sin(g)]);
+      }
+      return ra;
+    }
+  }
+  const v = pts.map(q => new THREE.Vector3(q[0], 0, q[1]));
+  const c = new THREE.CatmullRomCurve3(v, !!kin, 'centripetal');
+  const n = Math.max(8, Math.min(400, Math.round(c.getLength() / 0.5)));
+  return c.getPoints(n).map(q => [q.x, q.z]);
 }
 
 function veTayVe() {
   if (veTayGhost) { customGroup.remove(veTayGhost); veTayGhost = null; }
-  if (!veTay.on || veTay.pts.length < 2) return;
+  if (!veTay.on || !veTay.pts.length) return;
   veTayGhost = new THREE.Group();
   const y = floorY(veTay.f) + .08;
   const mat = new THREE.MeshBasicMaterial({ color: 0xffc14d });
+  const matMoc = new THREE.MeshBasicMaterial({ color: 0xffe9a8 });
   const t = +$('#dThick').value || .22;
-  for (let i = 0; i < veTay.pts.length - 1; i++) {
-    const a = veTay.pts[i], b = veTay.pts[i + 1];
+  const ds = veTay.tam ? veTay.pts.concat([veTay.tam]) : veTay.pts;
+  const duong = duongCong(ds, false);
+  for (let i = 0; i < duong.length - 1; i++) {
+    const a = duong[i], b = duong[i + 1];
     const L = Math.hypot(b[0] - a[0], b[1] - a[1]);
     if (L < .01) continue;
     const m = new THREE.Mesh(new THREE.BoxGeometry(L, .12, t), mat);
@@ -4199,35 +4239,36 @@ function veTayVe() {
     m.rotation.y = -Math.atan2(b[1] - a[1], b[0] - a[0]);
     veTayGhost.add(m);
   }
+  veTay.pts.forEach((q, i) => {                  // moc da bam
+    const c = new THREE.Mesh(new THREE.SphereGeometry(i === 0 ? .34 : .24, 10, 8), matMoc);
+    c.position.set(q[0], y, q[1]);
+    veTayGhost.add(c);
+  });
   customGroup.add(veTayGhost);
 }
 
 function veTayHuy() {
-  veTay.on = false; veTay.id = null; veTay.pts = [];
+  veTay.on = false; veTay.pts = []; veTay.tam = null;
   if (veTayGhost) { customGroup.remove(veTayGhost); veTayGhost = null; }
   controls.enabled = true; hint('');
 }
 
-function veTayChot() {
-  const f = veTay.f, tho = veTay.pts.slice();
+function veTayChot(kin) {
+  const f = veTay.f, moc = veTay.pts.slice();
   veTayHuy();
-  if (!f || tho.length < 2) return;
-  // net ket thuc gan cho bat dau -> khep kin thanh vong
-  const dau = tho[0], cuoi = tho[tho.length - 1];
-  const kin = tho.length > 6 && Math.hypot(cuoi[0] - dau[0], cuoi[1] - dau[1]) < 1.5;
-  if (kin) tho.push([dau[0], dau[1]]);
-  const pts = locDiem(tho, 0.12);
-  if (pts.length < 2) return;
+  if (!f || moc.length < 2) return;
+  const duong = duongCong(moc, kin);
+  if (duong.length < 2) return;
 
   const t = +$('#dThick').value || .22, h = +$('#dWallH').value || 0;
   const base = +$('#dBase').value || 0;
   const stt = customOf(f.page).length + 1;
   const nhom = 'N' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
-  const n = pts.length - 1;
+  const n = duong.length - 1;
   chup();
   for (let i = 0; i < n; i++) {
-    const a = baseFromWorld(f, pts[i][0], pts[i][1]);
-    const b = baseFromWorld(f, pts[i + 1][0], pts[i + 1][1]);
+    const a = baseFromWorld(f, duong[i][0], duong[i][1]);
+    const b = baseFromWorld(f, duong[i + 1][0], duong[i + 1][1]);
     customOf(f.page).push({
       type: 'wall', nhom,
       id: 'C' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5) + i,
@@ -4236,8 +4277,9 @@ function veTayChot() {
     });
   }
   saveCustom(); rebuildCustom();
-  hint('Đã vẽ tường cong ' + n + ' đoạn' + (kin ? ' (khép kín)' : ''));
-  setTimeout(() => hint(''), 1800);
+  hint('Đã vẽ tường cong ' + n + ' đoạn qua ' + moc.length + ' mốc' +
+       (kin ? ' (khép kín)' : ''));
+  setTimeout(() => hint(''), 2000);
 }
 
 function huyVe() {
@@ -4328,6 +4370,7 @@ function chotVe() {
 function setTool(t) {
   if (typeof gm !== 'undefined') gm.a = null;
   if (typeof dg !== 'undefined' && dg.on) dgHuy();
+  if (typeof veTay !== 'undefined' && veTay.on) veTayHuy();
   if (drag.on) huyVe();
   if (typeof canhBaoChan === 'function') canhBaoChan();
   state.tool = t;
@@ -4352,7 +4395,7 @@ function setTool(t) {
     : t === 'chop' ? 'Bấm ở mép đáy chóp, rê sang mép đối diện rồi bấm lần nữa (khoảng cách = bề rộng đáy)'
     : t === 'toma' ? 'Bấm ở mép hố tổ máy, rê sang mép đối diện rồi bấm lần nữa (khoảng cách = đường kính)'
     : t === 'fm200' ? 'Bấm lên mặt sàn để đặt bình khí FM-200'
-    : t === 'cong' ? 'Giữ chuột rồi rê theo đường cong muốn vẽ; thả ra là xong'
+    : t === 'cong' ? 'Bấm vài mốc trên đường cong — máy tự bo qua các mốc đó; Enter để kết thúc'
     : t === 'bin' ? 'Bấm lên mặt sàn để đặt bình chữa cháy'
       : t === 'stair' ? 'Bấm CHÂN thang, rê chuột lên, bấm lần nữa ở ĐỈNH thang'
         : t === 'rail' ? 'Bấm điểm đầu lan can, rê chuột, bấm lần nữa để chốt'
@@ -4480,6 +4523,11 @@ function initDesign() {
       e.preventDefault(); deleteSelection(); return;
     }
     if (e.key === 'Escape') { if (veTay.on) veTayHuy(); else if (dg.on) dgHuy(); else if (drag.on) huyVe(); else selectKey(null); }
+    if (e.key === 'Enter' && veTay.on && !typing) { e.preventDefault(); veTayChot(false); return; }
+    if (e.key === 'Backspace' && veTay.on && !typing) {
+      e.preventDefault(); veTay.pts.pop(); veTayVe();
+      if (!veTay.pts.length) veTayHuy(); return;
+    }
     if (e.key === 'Enter' && dg.on && !typing) { e.preventDefault(); dgChot(); return; }
     if (e.key === 'Backspace' && dg.on && !typing) {
       e.preventDefault(); dg.pts.pop(); dgVe();
