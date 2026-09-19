@@ -18,9 +18,19 @@
         display:flex;flex-direction:column;overflow:hidden}
   #side header{padding:12px 14px;border-bottom:1px solid var(--line)}
   #side h1{font-size:15px;margin:0 0 4px}
-  #side .khu{margin:10px 0 3px;padding:0 2px;font-size:10px;letter-spacing:.09em;
-    text-transform:uppercase;color:#7c93a6;border-bottom:1px solid #26384a}
-  #side .khu:first-child{margin-top:2px}
+  /* Khu nha = mot the gap lai; bam tieu de de mo, moi luc mot khu */
+  #side .khu{display:flex;align-items:center;gap:6px;margin:4px 0 0;padding:6px 8px;
+    border:1px solid #26384a;border-radius:6px;background:#16222e;cursor:pointer;
+    font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:#93a9ba;
+    user-select:none}
+  #side .khu:hover{background:#1c2b3a;color:#cfe0ee}
+  #side .khu.mo{background:#1e3247;border-color:#3a6488;color:#dceaf5}
+  #side .khu .mui{display:inline-block;transition:transform .12s;font-size:9px}
+  #side .khu.mo .mui{transform:rotate(90deg)}
+  #side .khu .nm{flex:1;text-align:left}
+  #side .khu .ct{font-size:10px;color:#6f8698;text-transform:none;letter-spacing:0}
+  #side .khuThan{display:none;padding:2px 0 4px 8px;border-left:1px solid #26384a;
+    margin-left:8px}
   #side .sub{font-size:11px;color:var(--muted);line-height:1.45}
   #side .scroll{overflow-y:auto;padding:10px 12px 24px;flex:1}
   .sec{margin-bottom:16px}
@@ -299,7 +309,7 @@
 <script type="importmap">
 { "imports": { "three": "./vendor/three.module.js" } }
 </script>
-<script type="module" src="./app.js?v=1789825643"></script>
+<script type="module" src="./app.js?v=1789825856"></script>
 <div id="wkHud" style="display:none;position:fixed;left:50%;bottom:26px;transform:translateX(-50%);
      background:rgba(16,21,28,.88);border:1px solid #2b3540;border-radius:10px;padding:10px 16px;
      color:#e6edf3;font:13px/1.5 system-ui;z-index:50;text-align:center;min-width:280px"></div>

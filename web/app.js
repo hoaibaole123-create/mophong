@@ -4555,14 +4555,39 @@ function renderSidebar() {
   const dsF = [...d.floors].sort((a, b) =>
     (THU_TU_KHU.indexOf(khuNha(a)) - THU_TU_KHU.indexOf(khuNha(b))) ||
     (b.elevation - a.elevation));
-  const nhomCo = new Set(dsF.map(khuNha));
-  let khuTruoc = null;
-  for (const f of dsF) {
-    const khu = khuNha(f);
-    if (nhomCo.size > 1 && khu !== khuTruoc) {
-      fl.appendChild(el('div', 'khu', khu));
-      khuTruoc = khu;
+  const nhomCo = [...new Set(dsF.map(khuNha))];
+  // Moi khu mot the gap lai: bam tieu de moi mo ra, va chi mo MOT khu mot luc.
+  const chiaKhu = nhomCo.length > 1;
+  const oKhu = {};
+  if (chiaKhu) {
+    const dangO = dsF.find(f => f.page === state.activeFloor);
+    // Mo san khu dang xem; chua chon gi thi mo Gian may — khu chinh cua nha may.
+    const moSan = (nhomCo.includes(state.khuMo) && state.khuMo) ||
+                  (dangO ? khuNha(dangO)
+                         : (nhomCo.includes('Gian máy') ? 'Gian máy' : nhomCo[0]));
+    for (const khu of nhomCo) {
+      const dau = el('div', 'khu');
+      const than = el('div', 'khuThan');
+      const soTB = d.items.filter(i =>
+        dsF.some(f => khuNha(f) === khu && f.page === i.floor)).length;
+      const soCT = dsF.filter(f => khuNha(f) === khu).length;
+      dau.innerHTML = `<span class="mui">▸</span><span class="nm">${khu}</span>` +
+                      `<span class="ct">${soCT} cao trình · ${soTB}</span>`;
+      const mo = m => {
+        dau.classList.toggle('mo', m);
+        than.style.display = m ? 'block' : 'none';
+      };
+      dau.onclick = () => {
+        const dangMo = dau.classList.contains('mo');
+        for (const k of nhomCo) oKhu[k].mo(false);
+        mo(!dangMo);
+      };
+      oKhu[khu] = { dau, than, mo };
+      fl.appendChild(dau); fl.appendChild(than);
+      mo(khu === moSan);
     }
+  }
+  for (const f of dsF) {
     const n = d.items.filter(i => i.floor === f.page).length;
     const row = el('div', 'row active');
     row.dataset.page = f.page;
@@ -4571,6 +4596,7 @@ function renderSidebar() {
       <span class="ct" data-ct>${n}</span>`;
     row.onclick = () => {
       state.activeFloor = f.page;
+      state.khuMo = khuNha(f);
       document.querySelectorAll('#floors .row').forEach(r => r.style.outline = '');
       row.style.outline = '1px solid #4a7ba8';
       state.visible = new Set([f.page]);   // bấm cao trình nào -> chỉ hiện cao trình đó
@@ -4587,7 +4613,7 @@ function renderSidebar() {
       syncFloorRows(); applyVisibility();
     };
     row.appendChild(eye);
-    fl.appendChild(row);
+    (chiaKhu ? oKhu[khuNha(f)].than : fl).appendChild(row);
   }
 
   const notes = $('#notes');
