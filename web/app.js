@@ -4622,7 +4622,7 @@ function showInfo(it) {
     ? `X ${viTriBinh(it)[0].toFixed(1)} m · Y ${viTriBinh(it)[1].toFixed(1)} m`
     : `X ${(viTriBinh(it)[0] * sM).toFixed(1)} m · Y ${(viTriBinh(it)[1] * sM).toFixed(1)} m`;
   veTheKiemTra('i:' + it.id, f.page, TEN_PT[it.type] || t.label,
-    kyMaHieu(it.type, f, it.id),
+    kyMaHieu(it.type, f, it.ma || it.id, !!it.ma),
     f.name + (it.room ? ' · ' + it.room : '') + ' — ' + pos);
 }
 
@@ -4646,8 +4646,11 @@ const TEN_PT = {
 const VIET_TAT = { ABC8: 'BỘT', CO25: 'CO2', CO224: 'CO2', CO2: 'CO2', HONG: 'HCC',
                    NUTBAO: 'NA', hong: 'HCC', nutbao: 'NA', fm200: 'FM200', bin: 'BỘT' };
 
-// Ky ma hieu theo mau cua don vi: <LOAI>-▼<cao trinh>-<ma thiet bi>
-function kyMaHieu(loai, f, ma) {
+// Ky ma hieu theo mau cua don vi: <LOAI>-▼<cao trinh>-<ma thiet bi>.
+// Rieng thiet bi CO TEN IN SAN TREN BAN VE (HCC-GM05, CO2-61, THB7-FM200-B01)
+// thi giu nguyen ten do — day moi la ky ma hieu that cua don vi.
+function kyMaHieu(loai, f, ma, veGoc) {
+  if (veGoc) return String(ma);
   const el = (f.elevation || 0).toFixed(2).replace('.', ',');
   const vt = VIET_TAT[loai] || 'PT';
   // Ma cua vat tu ve da mang san tien to (HCC-01-01) -> bo di cho khoi lap lai
@@ -4705,7 +4708,7 @@ function showInfoVe(mesh) {
                                : (TEN_PT[o.type] || o.name);
   const loai = o.type === 'bin' ? (o.binh || 'ABC8') : o.type;
   const ma = mesh.userData.maSo || o.id;
-  veTheKiemTra('c:' + o.id, f.page, ten, kyMaHieu(loai, f, ma),
+  veTheKiemTra('c:' + o.id, f.page, ten, kyMaHieu(loai, f, ma, !!o.ma),
     f.name + ' — X ' + (o.u0 * sM).toFixed(1) + ' m · Y ' + (o.v0 * sM).toFixed(1) + ' m');
 }
 

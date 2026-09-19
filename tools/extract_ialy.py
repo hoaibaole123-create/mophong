@@ -15,6 +15,13 @@ import pymupdf
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import ialy_do as DO
 
+# Ten thiet bi IN TREN BAN VE (doc bang mat, xem ialy_gan_ten.py). Khong co
+# file nay thi thiet bi giu ma tu danh.
+try:
+    TEN_VE = json.load(open(os.path.join("tools", "ialy_ten_gan.json"), encoding="utf-8"))
+except OSError:
+    TEN_VE = {}
+
 PDF = "SD chi dan thoat nan va bo tri phuong tien PCCC&CNCH NMTD Ialy.pdf"
 OUT = os.path.join("web", "data", "ialy")
 IMG = os.path.join(OUT, "floors")
@@ -149,21 +156,29 @@ def main():
             "walls": [], "doors": [], "cabinets": [],
         })
 
+        ten_kv = TEN_VE.get(str(k), {})
         for loai in ("binhBot", "binhKhi", "nutBao"):
-            for q in kq[loai]:
+            for n, q in enumerate(kq[loai]):
                 stt += 1
                 x, y = uv(q)
-                items.append({"id": "IA-%s-%03d" % (ma, stt), "floor": k,
-                              "type": LOAI[loai][0], "bx": x, "by": y,
-                              "room": None})
+                it = {"id": "IA-%s-%03d" % (ma, stt), "floor": k,
+                      "type": LOAI[loai][0], "bx": x, "by": y, "room": None}
+                tv = ten_kv.get(loai, {}).get(str(n))
+                if tv:
+                    it["ma"] = tv          # ten in tren ban ve -> len the kiem tra
+                items.append(it)
         # hong lay nuoc -> doi tuong 'hong' nhu ben Ialy mo rong
         ds = []
         for n, q in enumerate(kq["hongNuoc"]):
             x, y = uv(q)
-            ds.append({"type": "hong", "id": "hg%02d%02d" % (k, n + 1),
-                       "u0": x, "v0": y, "u1": x, "v1": y,
-                       "h": 0, "base": 0,
-                       "name": "Họng nước vách tường %d" % (n + 1)})
+            o = {"type": "hong", "id": "hg%02d%02d" % (k, n + 1),
+                 "u0": x, "v0": y, "u1": x, "v1": y,
+                 "h": 0, "base": 0,
+                 "name": "Họng nước vách tường %d" % (n + 1)}
+            tv = ten_kv.get("hongNuoc", {}).get(str(n))
+            if tv:
+                o["ma"] = tv
+            ds.append(o)
         if ds:
             custom[str(k)] = ds
         for n, q in enumerate(kq["denExit"]):
@@ -195,6 +210,8 @@ def main():
               open(os.path.join(OUT, "custom.json"), "w", encoding="utf-8"),
               ensure_ascii=False)
 
+    nTen = sum(1 for it in items if it.get("ma")) +            sum(1 for v in custom.values() for o in v if o.get("ma"))
+    print("thiet bi mang ten in tren ban ve:", nTen)
     nHong = sum(len(v) for v in custom.values())
     print("khu vuc:", len(floors), " thiet bi:", len(items),
           " hong nuoc:", nHong, " den EXIT:", len(exits))
