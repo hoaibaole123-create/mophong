@@ -81,7 +81,8 @@ const markerGroup = new THREE.Group();
 const massGroup = new THREE.Group();
 const customGroup = new THREE.Group();
 const exitGroup = new THREE.Group();
-scene.add(floorGroup, massGroup, customGroup, markerGroup, exitGroup);
+const maSoGroup = new THREE.Group();
+scene.add(floorGroup, massGroup, customGroup, markerGroup, exitGroup, maSoGroup);
 
 const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
@@ -147,6 +148,42 @@ function labelSprite(text, color = '#9aa7b4', px = 96) {
   tex.colorSpace = THREE.SRGBColorSpace;
   const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false }));
   sp.scale.set(c.width / c.height * 2.8, 2.8, 1);
+  return sp;
+}
+
+// ---------------------------------------------------------------------------
+// THE MA SO treo tren tung thiet bi. Ve mot lan roi dung chung texture cho cac
+// ma giong nhau; moi cao trinh hang tram thiet bi nen phai tiet kiem.
+// ---------------------------------------------------------------------------
+const _theMa = new Map();
+function theMaSo(ma) {
+  let t = _theMa.get(ma);
+  if (!t) {
+    const px = 64, c = document.createElement('canvas');
+    let x = c.getContext('2d');
+    x.font = `bold ${px}px Segoe UI, sans-serif`;
+    const w = Math.ceil(x.measureText(ma).width) + 34;
+    c.width = w; c.height = px * 1.6;
+    x = c.getContext('2d');
+    const r = 16;                                   // nền bo góc cho dễ đọc
+    x.fillStyle = 'rgba(14,18,24,.82)';
+    x.beginPath(); x.moveTo(r, 0); x.lineTo(w - r, 0); x.quadraticCurveTo(w, 0, w, r);
+    x.lineTo(w, c.height - r); x.quadraticCurveTo(w, c.height, w - r, c.height);
+    x.lineTo(r, c.height); x.quadraticCurveTo(0, c.height, 0, c.height - r);
+    x.lineTo(0, r); x.quadraticCurveTo(0, 0, r, 0); x.fill();
+    x.strokeStyle = 'rgba(255,255,255,.28)'; x.lineWidth = 3; x.stroke();
+    x.font = `bold ${px}px Segoe UI, sans-serif`;
+    x.fillStyle = '#eaf2fb'; x.textBaseline = 'middle';
+    x.fillText(ma, 17, c.height / 2 + 2);
+    t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    _theMa.set(ma, t);
+  }
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true,
+                                                         depthTest: false }));
+  const k = t.image.width / t.image.height;
+  sp.scale.set(k * 0.45, 0.45, 1);
+  sp.renderOrder = 5;
   return sp;
 }
 
@@ -1738,6 +1775,44 @@ function buildScene() {
   applyVisibility();
 }
 
+// Ma so tung thiet bi: binh chua chay lay ma san co, hong nuoc va nut an duoc
+// danh ma theo cao trinh (HCC-<trang>-<n>, NA-<trang>-<n>) vi ban ve khong ghi.
+function maCuaVat(o, f, n) {
+  if (o.ma) return o.ma;
+  const t = String(f.page + 1).padStart(2, '0');
+  if (o.type === 'hong') return 'HCC-' + t + '-' + String(n).padStart(2, '0');
+  if (o.type === 'nutbao') return 'NA-' + t + '-' + String(n).padStart(2, '0');
+  if (o.type === 'bin') return 'BX-' + t + '-' + String(n).padStart(2, '0');
+  if (o.type === 'fm200') return 'FM-' + t + '-' + String(n).padStart(2, '0');
+  return null;
+}
+
+function dungMaSo() {
+  maSoGroup.traverse(o => { if (o.material) o.material.dispose(); });
+  maSoGroup.clear();
+  if (!state.maSo) return;
+  const cao = 1.15 * state.explode;
+  for (const m of markers) {                      // binh boc tu ban ve
+    if (!m.visible) continue;
+    const sp = theMaSo(m.userData.item.id);
+    sp.position.set(m.position.x, m.position.y + cao, m.position.z);
+    maSoGroup.add(sp);
+  }
+  const dem = {};
+  for (const mesh of customMeshes) {              // hong nuoc, nut an, binh tu ve
+    const o = mesh.userData.obj;
+    if (!o || !['hong', 'nutbao', 'bin', 'fm200'].includes(o.type)) continue;
+    if (!mesh.visible) continue;
+    const f = floorOf(mesh.userData.page ?? state.data.floors[0].page);
+    dem[o.type + f.page] = (dem[o.type + f.page] || 0) + 1;
+    const ma = maCuaVat(o, f, dem[o.type + f.page]);
+    if (!ma) continue;
+    const sp = theMaSo(ma);
+    sp.position.set(mesh.position.x, mesh.position.y + (o.type === 'hong' ? 0.75 : 0.35), mesh.position.z);
+    maSoGroup.add(sp);
+  }
+}
+
 function applyVisibility() {
   const q = state.query.trim().toUpperCase();
   for (const m of markers) {
@@ -1784,6 +1859,7 @@ function applyVisibility() {
     m.traverse(o => { if (o.userData.khung) o.visible = state.frame && state.mode === 'design'; });
   });
   if (typeof rebuildCustom === 'function') rebuildCustom();
+  dungMaSo();                                   // thẻ mã số bám theo vật đang hiện
   renderSidebarCounts();
 }
 
@@ -2257,6 +2333,7 @@ function rebuildCustom() {
       }
       if (mesh.isGroup) mesh = gopNhom(mesh);     // gộp để giảm số lệnh vẽ
       mesh.userData.obj = o;
+      mesh.userData.page = f.page;               // để đánh mã số khỏi phải dò lại
       // Ở MẶT BẰNG 2D phải vẽ SAU tấm ảnh bản vẽ. Vật liệu tường đặt
       // depthWrite = false (cho khỏi vỡ mặt khi mờ), nên nó không ghi chiều sâu;
       // tấm ảnh bản vẽ có renderOrder = 1, vẽ sau, phủ luôn lên tường -> vẽ
@@ -4611,6 +4688,13 @@ $('#massing').onclick = e => {
   e.target.classList.toggle('pri', state.massing);
   applyVisibility();
 };
+$('#maso').onclick = e => {
+  state.maSo = !state.maSo;
+  e.target.classList.toggle('pri', state.maSo);
+  e.target.textContent = state.maSo ? 'Mã số thiết bị' : 'Mã số thiết bị (đang tắt)';
+  try { localStorage.setItem(khoaKho('maSo'), state.maSo ? '1' : '0'); } catch (err) { }
+  dungMaSo(); window.veLai(2);
+};
 $('#plan2d').onclick = e => {
   state.showPlan = !state.showPlan;
   e.target.classList.toggle('pri', state.showPlan);
@@ -4772,6 +4856,7 @@ fetch(duongDL('plant.json?v=') + Date.now()).then(r => r.json()).then(d => {
   state.data = d;
   state.unitM = +(localStorage.getItem(khoaKho('unitM')) || d.default_unit_spacing_m);
   state.showPlan = localStorage.getItem(khoaKho('showPlan')) === '1';   // mặc định tắt
+  state.maSo = localStorage.getItem(khoaKho('maSo')) === '1';          // mặc định tắt
   $('#calib').value = state.unitM;
   state.visible = new Set(d.floors.map(f => f.page));
   state.typeOn = new Set(Object.keys(d.types));
@@ -4807,6 +4892,11 @@ fetch(duongDL('plant.json?v=') + Date.now()).then(r => r.json()).then(d => {
   initDesign();
   resize();
   fitAll();
+  const bMa = $('#maso');
+  if (bMa) {
+    bMa.classList.toggle('pri', state.maSo);
+    bMa.textContent = state.maSo ? 'Mã số thiết bị' : 'Mã số thiết bị (đang tắt)';
+  }
   const bPlan = $('#plan2d');
   if (bPlan) {
     bPlan.classList.toggle('pri', state.showPlan);
