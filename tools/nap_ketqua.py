@@ -97,6 +97,25 @@ def main():
     print("da dien %d o ket qua (thang %s)" % (dem, ", ".join(sorted({
         x["ngay"].split("/")[1] for x in ghepDuoc.values() if x["ngay"]}))))
 
+    # Ghi ra TEP DU LIEU RIENG (web/data/ketqua.json). Luc dau toi ghi thang
+    # vao ban ve tren dam may, nhung dong bo cua ung dung day CA GOI du lieu
+    # len moi lan luu: mot tab dang mo con giu ban cu la de len, ket qua vua
+    # nap bay het. Tep nay ung dung chi doc, khong bao gio ghi de.
+    ngoai = {}
+    for bid, x in ghepDuoc.items():
+        if not x["ngay"]:
+            continue
+        ngoai.setdefault("i:" + bid, {})[str(int(x["ngay"].split("/")[1]))] = {
+            "ngay": x["ngay"], "kq": x["kq"], "nguoi": x["nguoi"]}
+    tep = os.path.join("web", "data", "ketqua.json")
+    cu = {}
+    if os.path.exists(tep):
+        cu = json.load(open(tep, encoding="utf-8"))
+    for k, v in ngoai.items():
+        cu.setdefault(k, {}).update(v)
+    json.dump(cu, open(tep, "w", encoding="utf-8"), ensure_ascii=False)
+    print("da ghi %s  (%d binh)" % (tep, len(cu)))
+
     if "--day" in sys.argv:
         api(url, key, "ialy_thiet_ke?on_conflict=doc", [{"doc": DOC, "du_lieu": d}],
             "POST", {"Prefer": "resolution=merge-duplicates"})

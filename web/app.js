@@ -4868,6 +4868,16 @@ function showInfo(it) {
 // ten phuong tien, ky ma hieu, so seri, ngay dua vao su dung va bang 12 thang
 // ghi ket qua kiem tra. Phan nguoi dung dien duoc luu theo tung thiet bi.
 // ---------------------------------------------------------------------------
+// Ket qua kiem tra hang thang nap tu phieu PDF (tools/doc_phieu.py +
+// nap_ketqua.py). De o TEP RIENG chu khong nhet vao ban ve tren dam may:
+// dong bo day ca goi du lieu len moi lan luu, mot tab dang mo con giu ban cu
+// se de len va xoa sach ket qua vua nap.
+let KQ_PHIEU = {};
+fetch(duongDL('ketqua.json?v=') + Date.now())
+  .then(r => (r.ok ? r.json() : {}))
+  .then(d => { KQ_PHIEU = d || {}; })
+  .catch(() => { KQ_PHIEU = {}; });
+
 function theOf(page) {
   const e = editsOf(page);
   e.the = e.the || {};
@@ -4948,8 +4958,11 @@ function veTheKiemTra(khoa, page, tenPT, ky, ghiChu) {
        '<input data-o="ngaySD" value="' + ngay + '" style="text-align:left;width:40%" placeholder="dd/mm/yyyy"></div>';
   h += '<table><tr><th>Ngày, tháng<br>kiểm tra</th><th>Kết quả<br>kiểm tra</th>' +
        '<th>Người, đơn vị<br>kiểm tra</th></tr>';
+  const ngoai = KQ_PHIEU[khoa] || {};
   for (let i = 0; i < 12; i++) {
-    const r = d.hang[i] || {};
+    // Nguoi dung tu dien thi uu tien; chua dien thi lay theo phieu da nap.
+    const tay = d.hang[i] || {};
+    const r = (tay.kq || tay.nguoi || tay.ngay) ? tay : (ngoai[String(i + 1)] || {});
     const thang = String(i + 1).padStart(2, '0');
     h += '<tr><td class="ng">….../' + thang + '/' + nam +
          '<input data-h="' + i + '" data-o="ngay" value="' + (r.ngay || '') +
