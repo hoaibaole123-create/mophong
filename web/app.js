@@ -472,8 +472,9 @@ function datLaiViTriBinh() {
     const [x, z] = worldXZ(f, doi ? doi[0] : it.bx, doi ? doi[1] : it.by);
     m.position.set(x, floorY(f) + .05, z);
     m.rotation.y = 0;
-    if (it.type === 'NUTBAO') xoayNutBao(m, f, x, z);
-    else treoBinhLenTuong(m, f, x, z, it.type, floorY(f));
+    const lb = loaiBinh(it);
+    if (lb === 'NUTBAO') xoayNutBao(m, f, x, z);
+    else treoBinhLenTuong(m, f, x, z, lb, floorY(f));
   }
 }
 
@@ -554,6 +555,7 @@ function editsOf(page) {
   e.movExit = e.movExit || {};      // đèn EXIT đã dời: mã đèn -> [bx, by]
   e.movItem = e.movItem || {};      // bình chữa cháy đã dời: mã bình -> [bx, by]
   e.matExit = e.matExit || {};      // đèn EXIT đặt mặt nào của cửa: mã đèn -> 1 (trước) / -1 (sau)
+  e.loaiItem = e.loaiItem || {};    // bình đã đổi loại: mã bình -> mã loại mới (CO224…)
   return e;
 }
 
@@ -1806,18 +1808,25 @@ function buildScene() {
     const f = floorOf(it.floor);
     const doi = editsOf(f.page).movItem[it.id];        // bình đã được dời tay
     const [x, z] = worldXZ(f, doi ? doi[0] : it.bx, doi ? doi[1] : it.by);
-    const col = new THREE.Color(state.data.types[it.type].color);
+    const lb = loaiBinh(it);
+    const col = new THREE.Color(state.data.types[lb].color);
     const mat = new THREE.MeshStandardMaterial({ color: col, roughness: .45, metalness: .15,
       emissive: col.clone().multiplyScalar(.25) });
-    const g = makeMarker(it.type, mat);
+    const g = makeMarker(lb, mat);
     g.position.set(x, floorY(f) + .05, z);
-    if (it.type === 'NUTBAO') xoayNutBao(g, f, x, z);
-    else treoBinhLenTuong(g, f, x, z, it.type, floorY(f));
+    if (lb === 'NUTBAO') xoayNutBao(g, f, x, z);
+    else treoBinhLenTuong(g, f, x, z, lb, floorY(f));
     g.userData.item = it;
     g.userData.mat = mat;
     markerGroup.add(g); markers.push(g);
   }
   applyVisibility();
+}
+
+// Loai THUC TE cua mot binh: binh nao da duoc doi loai thi lay loai moi.
+// Ban ve goc khong doi, chi ghi de trong phan sua cua nguoi dung.
+function loaiBinh(it) {
+  return (editsOf(floorOf(it.floor).page).loaiItem || {})[it.id] || it.type;
 }
 
 // Ma so tung thiet bi: binh chua chay lay ma san co, hong nuoc va nut an duoc
@@ -1851,10 +1860,10 @@ function applyVisibility() {
   for (const m of markers) {
     const it = m.userData.item;
     const okF = state.visible.has(it.floor);
-    const okT = state.typeOn.has(it.type);
+    const okT = state.typeOn.has(loaiBinh(it));
     const okQ = !q || it.id.includes(q) || (it.ma || '').toUpperCase().includes(q) ||
       (it.room || '').includes(q) ||
-      state.data.types[it.type].label.toUpperCase().includes(q);
+      state.data.types[loaiBinh(it)].label.toUpperCase().includes(q);
     m.visible = okF && okT && okQ && editsOf(it.floor).delItem.indexOf(it.id) < 0;
     // Đi bộ thì bình phải đúng cỡ thật (cao ~0,55 m) chứ không phải cỡ ký hiệu
     // phóng to dùng cho góc nhìn tổng thể — nếu không, đứng cạnh sẽ thấy bình
@@ -2620,6 +2629,29 @@ function renderEditPanel() {
       saveEdits(); state.sel = null; clearHighlight(); rebuildMasses(); renderEditPanel();
     };
     btns.appendChild(b2);
+  }
+  if (p[0] === 'm') {                         // bình bóc từ bản vẽ: đổi loại bình
+    const id = p.slice(2).join(':'), page = +p[1];
+    const it = state.data.items.find(x => x.id === id);
+    if (it) {
+      const ed = editsOf(page);
+      const o = el('div', 'num');
+      let hs = '<label>Loại bình</label><select id="dDoiLoai">';
+      for (const [ma, t] of Object.entries(state.data.types))
+        hs += '<option value="' + ma + '"' + (loaiBinh(it) === ma ? ' selected' : '') +
+              '>' + t.label + '</option>';
+      o.innerHTML = hs + '</select>';
+      box.appendChild(o);
+      o.querySelector('#dDoiLoai').onchange = e => {
+        chup();
+        if (e.target.value === it.type) delete ed.loaiItem[id];
+        else ed.loaiItem[id] = e.target.value;
+        saveEdits(); buildScene(); rebuildCustom(); renderSidebar(); renderEditPanel();
+        selectKey(null);
+        hint('Đã đổi thành: ' + state.data.types[loaiBinh(it)].label);
+        setTimeout(() => hint(''), 2200);
+      };
+    }
   }
   if (p[0] === 'x' || (state.sel.slice(0, 2) === 'c:' && (selectedObj() || {}).type === 'exit')) {
     const bc = el('button', '', '⤒ Gắn lên cửa gần nhất');
@@ -4732,7 +4764,7 @@ function renderSidebar() {
 
   const types = $('#types'); types.innerHTML = '';
   for (const [code, t] of Object.entries(d.types)) {
-    const n = d.items.filter(i => i.type === code).length;
+    const n = d.items.filter(i => loaiBinh(i) === code).length;
     const row = el('div', 'row active');
     row.innerHTML = `<span class="dot" style="background:${t.color}"></span>
       <span class="nm">${t.label}</span><span class="ct">${n}</span>`;
@@ -4843,7 +4875,7 @@ function renderSidebarCounts() {
   const shown = markers.filter(m => m.visible).length;
   const d = state.data;
   const byType = {};
-  for (const [c, t] of Object.entries(d.types)) byType[c] = d.items.filter(i => i.type === c).length;
+  for (const [c, t] of Object.entries(d.types)) byType[c] = d.items.filter(i => loaiBinh(i) === c).length;
   $('#stats').innerHTML =
     `<div class="chip">Tổng<b>${d.items.length}</b></div>
      <div class="chip">Đang hiện<b>${shown}</b></div>
@@ -4852,13 +4884,13 @@ function renderSidebarCounts() {
 }
 
 function showInfo(it) {
-  const f = floorOf(it.floor), t = state.data.types[it.type];
+  const f = floorOf(it.floor), lb = loaiBinh(it), t = state.data.types[lb];
   const sM = mpp();
   const pos = f.georef === 'standalone'
     ? `X ${viTriBinh(it)[0].toFixed(1)} m · Y ${viTriBinh(it)[1].toFixed(1)} m`
     : `X ${(viTriBinh(it)[0] * sM).toFixed(1)} m · Y ${(viTriBinh(it)[1] * sM).toFixed(1)} m`;
-  veTheKiemTra('i:' + it.id, f.page, TEN_PT[it.type] || t.label,
-    kyMaHieu(it.type, f, it.ma || it.id, !!it.ma),
+  veTheKiemTra('i:' + it.id, f.page, TEN_PT[lb] || t.label,
+    kyMaHieu(lb, f, it.ma || it.id, !!it.ma),
     f.name + (it.room ? ' · ' + it.room : '') + ' — ' + pos);
 }
 
@@ -5050,7 +5082,7 @@ function onPointer(ev, click) {
     tip.style.left = (ev.clientX - r.left + 14) + 'px';
     tip.style.top = (ev.clientY - r.top + 12) + 'px';
     // Hien dung ten in tren ban ve (neu co) — phai khop voi the kiem tra.
-    tip.innerHTML = `<b>${it.ma || it.id}</b> — ${state.data.types[it.type].label}<br>
+    tip.innerHTML = `<b>${it.ma || it.id}</b> — ${state.data.types[loaiBinh(it)].label}<br>
                      ${f.name}${it.room ? ' · ' + it.room : ''}`;
     renderer.domElement.style.cursor = 'pointer';
   } else {
@@ -5129,7 +5161,7 @@ $('#csv').onclick = () => {
   for (const it of state.data.items) {
     const f = floorOf(it.floor);
     const k = f.georef === 'standalone' ? 1 : s;
-    rows.push([it.ma || it.id, state.data.types[it.type].label, f.elevation.toFixed(2), f.name,
+    rows.push([it.ma || it.id, state.data.types[loaiBinh(it)].label, f.elevation.toFixed(2), f.name,
       it.room || '', (viTriBinh(it)[0] * k).toFixed(2), (viTriBinh(it)[1] * k).toFixed(2), f.page + 1]);
   }
   const csv = '﻿' + rows.map(r => r.map(v => `"${v}"`).join(',')).join('\n');
