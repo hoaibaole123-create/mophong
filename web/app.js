@@ -4964,9 +4964,12 @@ function veTheKiemTra(khoa, page, tenPT, ky, ghiChu) {
     const tay = d.hang[i] || {};
     const r = (tay.kq || tay.nguoi || tay.ngay) ? tay : (ngoai[String(i + 1)] || {});
     const thang = String(i + 1).padStart(2, '0');
-    h += '<tr><td class="ng">….../' + thang + '/' + nam +
-         '<input data-h="' + i + '" data-o="ngay" value="' + (r.ngay || '') +
-         '" style="width:0;height:0;position:absolute;opacity:0"></td>' +
+    // Co ngay kiem tra that thi ghi ngay do; chua co thi de "…..." cho dien tay.
+    // O ngay chi go NGAY, phan thang/nam in san nhu tren the that.
+    const ngayCo = (r.ngay || '').split('/')[0];
+    h += '<tr><td class="ng"><input data-h="' + i + '" data-o="ngay" data-thang="' +
+         thang + '" class="ngayO" value="' + ngayCo + '" placeholder="…...">' +
+         '<span>/' + thang + '/' + nam + '</span></td>' +
          '<td><input data-h="' + i + '" data-o="kq" value="' + (r.kq || '') + '"></td>' +
          '<td><input data-h="' + i + '" data-o="nguoi" value="' + (r.nguoi || '') + '"></td></tr>';
   }
@@ -4979,8 +4982,13 @@ function veTheKiemTra(khoa, page, tenPT, ky, ghiChu) {
   $('#infobody').querySelectorAll('input').forEach(inp => {
     inp.oninput = () => {
       const i = inp.dataset.h, o = inp.dataset.o;
-      if (i === undefined) d[o] = inp.value;
-      else { d.hang[i] = d.hang[i] || {}; d.hang[i][o] = inp.value; }
+      // O ngay chi chua NGAY -> ghep lai thanh dd/mm/yyyy truoc khi luu
+      const v = inp.dataset.thang
+        ? (inp.value.trim() ? inp.value.trim().padStart(2, '0') + '/' +
+           inp.dataset.thang + '/' + nam : '')
+        : inp.value;
+      if (i === undefined) d[o] = v;
+      else { d.hang[i] = d.hang[i] || {}; d.hang[i][o] = v; }
       saveEdits();
     };
   });

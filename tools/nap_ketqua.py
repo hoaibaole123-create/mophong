@@ -107,6 +107,19 @@ def main():
             continue
         ngoai.setdefault("i:" + bid, {})[str(int(x["ngay"].split("/")[1]))] = {
             "ngay": x["ngay"], "kq": x["kq"], "nguoi": x["nguoi"]}
+    # Binh dat o thang nay thi cac thang TRUOC do trong nam cung dat (chu binh
+    # hong thi da phai thay tu truoc). Chi ghi ket qua va nguoi quan ly, KHONG
+    # dat ngay: khong co phieu cua nhung thang do nen khong biet ngay nao.
+    if "--thang-truoc" in sys.argv:
+        for k, v in ngoai.items():
+            dat = sorted((int(t) for t, x in v.items() if x["kq"] == "Đạt"))
+            if not dat:
+                continue
+            m = dat[0]
+            for t in range(1, m):
+                v.setdefault(str(t), {"ngay": "", "kq": "Đạt",
+                                      "nguoi": v[str(m)]["nguoi"]})
+
     tep = os.path.join("web", "data", "ketqua.json")
     cu = {}
     if os.path.exists(tep):
