@@ -2315,7 +2315,10 @@ function rebuildCustom() {
         } else if (o.type === 'wall') {
           const dx = bx - ax, dz = bz - az;
           const len = Math.max(.1, Math.hypot(dx, dz));
-          const day = dayVeTuong(o);            // ở 2D phải đủ dày để nhìn thấy
+          // mỗi bức tường lệch bề dày vài mm theo mã: chỗ hai tường thẳng hàng chờm
+          // lên nhau không bị trùng mặt (nhấp nháy đậm nhạt khi xoay nhìn)
+          let hs = 0; for (const ch of String(o.id || '')) hs = (hs * 31 + ch.charCodeAt(0)) % 9973;
+          const day = dayVeTuong(o) + (state.plan ? 0 : (hs % 7) * .003);
           const goc = -Math.atan2(dz, dx) + (o.rot || 0);
           // Khoét ô cửa: cửa nào nằm trên tuyến tường này thì tường chừa ra, chỉ còn lanh tô.
           const o_ = { x: (ax + bx) / 2, z: (az + bz) / 2 };
@@ -3632,19 +3635,23 @@ function makeDoor(rong, cao, loai, lat, chon, caoTren, dayTuong) {
   const day = 0.06;
   if (caoTren > 0.05) {                       // mảng tường phía trên ô cửa
     const m = new THREE.Mesh(
-      new THREE.BoxGeometry(rong + 0.24, caoTren, Math.max(.12, dayTuong || .22)),
+      // mỏng hơn tường ~3 cm và lệch nhẹ theo từng cửa: nằm gọn trong tường,
+      // không trùng mặt với tường hay với mảng trên cửa bên cạnh (nhấp nháy)
+      new THREE.BoxGeometry(rong + 0.24, caoTren,
+        Math.max(.1, (dayTuong || .22) - .03 - ((rong * 997) % 7) * .002)),
       chon ? MAT_SEL : matWallShared);
     m.position.set(0, cao + caoTren / 2, 0);
     g.add(m);
   }
   // khuôn cửa: hai đố đứng + đố ngang trên
   const doDung = (x) => {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(0.06, cao, 0.16), MAT_KHUON);
+    // khuôn 9 cm: mảnh hơn thì đứng xa chỉ còn 1–2 điểm ảnh, xoay nhìn là nhấp nháy
+    const m = new THREE.Mesh(new THREE.BoxGeometry(0.09, cao, 0.16), MAT_KHUON);
     m.position.set(x, cao / 2, 0); g.add(m);
   };
   doDung(-rong / 2); doDung(rong / 2);
-  const tren = new THREE.Mesh(new THREE.BoxGeometry(rong + 0.12, 0.08, 0.16), MAT_KHUON);
-  tren.position.set(0, cao + 0.04, 0); g.add(tren);
+  const tren = new THREE.Mesh(new THREE.BoxGeometry(rong + 0.15, 0.1, 0.16), MAT_KHUON);
+  tren.position.set(0, cao + 0.05, 0); g.add(tren);
 
   if (loai === 'cuon') {
     // thân cửa cuốn: các nan ngang
@@ -6131,6 +6138,9 @@ function vlDiBo(bat) {
     // máy văn phòng vẫn tải được; khung nhìn tổng thể (cả toà nhà) thì tắt.
     renderer.shadowMap.enabled = true;
     dir.castShadow = true;
+    // đi bộ chỉ vẽ một cao trình -> vẽ nét hơn cho nét mảnh (khuôn cửa) không chập chờn
+    _vlCu.tiLe = renderer.getPixelRatio();
+    renderer.setPixelRatio(Math.min(2, Math.max(_vlCu.tiLe, devicePixelRatio * 1.5)));
     const batBong = (g) => g && g.traverse(o => {
       if (!o.isMesh) return;
       o.castShadow = true; o.receiveShadow = true;
@@ -6172,6 +6182,7 @@ function vlDiBo(bat) {
     _vlCu.khac = [];
     renderer.shadowMap.enabled = false;
     dir.castShadow = false;
+    if (_vlCu.tiLe) { renderer.setPixelRatio(_vlCu.tiLe); _vlCu.tiLe = 0; }
     if (_vlCu.dat !== undefined) { denTroi.groundColor.setHex(_vlCu.dat); denTrongNha.intensity = 0; }
     if (_vlCu.nen !== undefined) {                 // tra lai nen canh cu
       scene.background = new THREE.Color(_vlCu.nen);
@@ -6301,9 +6312,10 @@ function vachCuaTang(f, gioiHan) {
     const dat = (a, b, tu, den) => {
       if (b - a < .25 || den - tu < .05) return;
       // đầu tuyến thì chờm thêm nửa bề dày: hai tường gặp góc khớp kín, không hở khe
-      if (a < .3) a -= w.day / 2 + .02;
-      if (b > w.L - .3) b += w.day / 2 + .02;
-      const g = new THREE.BoxGeometry(b - a, den - tu, w.day);
+      if (a < .3) a -= w.day / 2 - .015;
+      if (b > w.L - .3) b += w.day / 2 - .015;
+      // mỏng hơn tường tự vẽ 2 cm: nằm gọn bên trong, không tranh mặt với nó
+      const g = new THREE.BoxGeometry(b - a, den - tu, Math.max(.06, w.day - .02));
       const mx = w.x0 + ux * (a + b) / 2, mz = w.z0 + uz * (a + b) / 2;
       const m = new THREE.Matrix4().makeRotationY(goc);
       m.setPosition(mx, y + (tu + den) / 2, mz);
