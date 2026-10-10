@@ -5401,7 +5401,9 @@ function duoiLanCan(f, r) {
     const rNgang = Math.abs(o.u1 - o.u0) >= Math.abs(o.v1 - o.v0);
     if (rNgang !== ngang) continue;
     const ga = ngang ? (o.v0 + o.v1) / 2 : (o.u0 + o.u1) / 2;
-    if (Math.abs(ga - g) > 12) continue;                 // không cùng tuyến
+    // lan can nằm TRONG bề dày khối tường (khối PDF có khi dày cả mét) cũng tính
+    const nuaDay = (ngang ? r[3] - r[1] : r[2] - r[0]) / 2;
+    if (Math.abs(ga - g) > Math.max(12, nuaDay + 8)) continue;   // không cùng tuyến
     const b0 = Math.min(ngang ? o.u0 : o.v0, ngang ? o.u1 : o.v1);
     const b1 = Math.max(ngang ? o.u0 : o.v0, ngang ? o.u1 : o.v1);
     if ((Math.min(a1, b1 + 8) - Math.max(a0, b0 - 8)) / dai >= .6) return true;
@@ -7064,6 +7066,27 @@ window.IALY = {
              soBuocTrungOCua: soBuoc, caoTang: +(floorHeight(f) * state.explode).toFixed(1) };
   },
   // Kiem tra lanh to tren MOI o cua (ca cua boc tu ban ve) o TAT CA cao trinh
+  // dat nguoi di bo toi (x,z) va huong nhin -> dung de chup kiem tra
+  dat(x, z, yaw, pitch) { wk.x = x; wk.z = z; wk.yaw = yaw || 0; wk.pitch = pitch || 0;
+    wk.yawN = wk.yaw; wk.pitchN = wk.pitch; wk.vx = wk.vz = 0; return [wk.x, wk.z]; },
+  // chup khung 3D dang hien (dataURL PNG)
+  anh() { if (wk.on) buocDiBo(0.016); renderer.render(scene, camera);
+    return renderer.domElement.toDataURL('image/jpeg', .8); },
+  // lan can / tuong / binh cua cao trinh dang di bo (toa do the gioi)
+  vat(loai) { const f = wk.f; return customOf(f.page).filter(o => !loai || o.type === loai)
+    .map(o => ({ id: o.id, t: o.type, a: worldXZ(f, o.u0, o.v0).map(v => +v.toFixed(2)),
+                 b: worldXZ(f, o.u1, o.v1).map(v => +v.toFixed(2)) })); },
+  tuongPdf() { const f = wk.f, ed = editsOf(f.page);
+    return (f.walls || []).map((r, i) => ({ i, xoa: ed.delWall.indexOf(i) >= 0, lc: duoiLanCan(f, r),
+      a: worldXZ(f, r[0], r[1]).map(v => +v.toFixed(1)), b: worldXZ(f, r[2], r[3]).map(v => +v.toFixed(1)) }))
+      .filter(q => !q.xoa); },
+  doiTang(el) { const f = state.data.floors.find(q => Math.abs(q.elevation - el) < .05); doiTangDiBo(f); return f.name; },
+  // ban tia tu mat nguoi di bo ra truoc: trung vat gi
+  trungGi(nx, ny) { const rc = new THREE.Raycaster(); rc.setFromCamera(new THREE.Vector2(nx || 0, ny || 0), camera);
+    return rc.intersectObjects(scene.children, true).slice(0, 4).map(h => { let o = h.object, duong = [];
+      while (o) { duong.push((o.name || o.type) + (o.userData && o.userData.obj ? ':' + o.userData.obj.type + ':' + o.userData.obj.id : '')); o = o.parent; }
+      return { d: +h.distance.toFixed(2), p: [h.point.x, h.point.y, h.point.z].map(v => +v.toFixed(2)), duong: duong.slice(0, 4).join(' < '),
+               nhom: h.object === wkTuong || wkTuong.getObjectById(h.object.id) ? 'wkTuong' : customGroup.getObjectById(h.object.id) ? 'custom' : massGroup.getObjectById(h.object.id) ? 'mass' : '?' }; }); },
   lanhToMoiTang() {
     if (!wk.on) return 'hay bat di bo';
     const goc = wk.f, kq = [];
