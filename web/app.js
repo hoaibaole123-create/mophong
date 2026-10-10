@@ -6077,13 +6077,12 @@ function hudDiBo() {
         const d = Math.hypot(t.x - wk.x, t.z - wk.z);
         return (!a || d < a.d) ? { d: d, t: t } : a;
       }, null);
-      s += '<br><span style="color:#93a4b5">Muốn xuống: tới ' + g.t.ten.slice(0, 24) +
-           ' (' + g.d.toFixed(0) + ' m) rồi bấm <b>X</b></span>';
+      s += '<br><span style="color:#93a4b5">Bấm <b>X</b> để xuống ngay EL. ' +
+           g.t.tang.elevation.toFixed(2) + '</span>';
     }
   } else if (wk.dich && wk.duong.length <= 1) {
     s += '<span style="color:#35d07f">Bạn đang đứng ngay chân ' + wk.dich.ten.slice(0, 26) +
-         '</span><br><span style="color:#93a4b5">Bước ra xa 3 m rồi quay lại để lên, ' +
-         'hoặc bấm <b>X</b> để xuống</span>';
+         '</span><br><span style="color:#93a4b5">Bấm <b>Z</b> để lên, <b>X</b> để xuống</span>';
   } else if (wk.dich && wk.duong.length > 1) {
     const k = wk.duong[Math.min(4, wk.duong.length - 1)];
     const g = Math.atan2(k[1] - wk.z, k[0] - wk.x) + wk.yaw;
@@ -6092,7 +6091,7 @@ function hudDiBo() {
          ' — còn <b>' + wk.dich.dai.toFixed(0) + ' m</b><br>' +
          '<span style="color:#93a4b5">Lên EL. ' + tren[0].elevation.toFixed(2) +
          ' rồi tiếp tục cho tới EL. 348.00</span>' +
-         '<br><span style="color:#93a4b5">Bấm <b>X</b> ở đầu thang để đi xuống</span>';
+         '<br><span style="color:#93a4b5">Bấm <b>Z</b> lên ngay · <b>X</b> xuống ngay</span>';
   } else {
     s += '<span style="color:#e0a33b">Không tìm được lối vào buồng thang — bản vẽ ' +
          'có thể thiếu cửa ở đây. Sang tab Thiết kế vẽ thêm cửa (phím 9) là đi được.</span>';
@@ -6565,7 +6564,7 @@ function vaoDiBo() {
     const r = renderer.domElement.requestPointerLock();
     if (r && r.catch) r.catch(() => {});
   }
-  hint('Đi bộ: W/A/S/D hoặc mũi tên · Shift chạy · tới chân thang là TỰ LÊN · bấm X để XUỐNG · Esc thoát');
+  hint('Đi bộ: W/A/S/D hoặc mũi tên · Shift chạy · Z (PageUp) LÊN tầng trên · X (PageDown) XUỐNG tầng dưới · Esc thoát');
 }
 
 // Đổi cao trình trong lúc ĐANG đi bộ: phải dựng lại vách, lưới đi lại, thang và
@@ -6618,32 +6617,33 @@ addEventListener('keydown', function (e) {
     if (wk.leo) { wk.leo = null; wk.khoaThang = true; doDuong(); veDuong(); hudDiBo(); return; }
     raDiBo(); return;
   }
-  if (e.key === 'x' || e.key === 'X') {            // X = đi XUỐNG cao trình dưới
+  // X / PageDown = XUỐNG ngay cao trình dưới, Z / PageUp = LÊN ngay cao trình trên.
+  // Không phải đi tới chân thang và không leo từng bậc: bấm là sang tầng luôn,
+  // đứng ở đầu cầu thang gần nhất (cầu thang vẫn hiện để nhìn thấy).
+  const k = e.key.toLowerCase();
+  if (k === 'x' || k === 'pagedown') {
+    e.preventDefault();
     const ds = thangXuong(wk.f);
-    let gan = null;
-    for (const t of ds) {
-      const d = Math.hypot(t.x - wk.x, t.z - wk.z);
-      if (!gan || d < gan.d) gan = { d: d, t: t };
+    if (!ds.length) { hint('Cao trình này không có thang đi xuống'); setTimeout(() => hint(''), 2200); return; }
+    const gan = ds.reduce((a, t) => { const d = Math.hypot(t.x - wk.x, t.z - wk.z);
+      return (!a || d < a.d) ? { d: d, t: t } : a; }, null);
+    wk.leo = null; wk.khoaThang = true; wk.yMat = undefined;
+    xuongThang(gan.t.ten);
+    return;
+  }
+  if (k === 'z' || k === 'pageup') {
+    e.preventDefault();
+    const coTren = state.data.floors.some(x => x.georef !== 'standalone' && x.elevation > wk.f.elevation);
+    if (!coTren) { hint('Đang ở cao trình trên cùng'); setTimeout(() => hint(''), 2200); return; }
+    let gan = null, xa = 1e9;
+    for (const o of customOf(wk.f.page)) {
+      if (o.type !== 'thangbo' && o.type !== 'stair') continue;
+      const a = worldXZ(wk.f, o.u0, o.v0), b = worldXZ(wk.f, o.u1, o.v1);
+      const d = Math.hypot((a[0] + b[0]) / 2 - wk.x, (a[1] + b[1]) / 2 - wk.z);
+      if (d < xa) { xa = d; gan = o; }
     }
-    if (gan && gan.d < 6) {
-      const duoi = gan.t.tang;
-      let ve = null, tot = 1e9;
-      for (const o of customOf(duoi.page)) {
-        if (o.type !== 'thangbo' && o.type !== 'stair') continue;
-        const a = worldXZ(duoi, o.u0, o.v0), b = worldXZ(duoi, o.u1, o.v1);
-        const dd = Math.hypot((a[0] + b[0]) / 2 - wk.x, (a[1] + b[1]) / 2 - wk.z);
-        if (dd < tot) { tot = dd; ve = o; }
-      }
-      if (ve) batDauLeo(ve, duoi, -1, ve.name); else xuongThang(gan.t.ten);
-    }
-    else if (gan) {
-      hint('Còn ' + gan.d.toFixed(0) + ' m nữa tới ' + gan.t.ten.slice(0, 26) +
-           ' — lại gần rồi bấm X để xuống');
-      setTimeout(() => hint(''), 2600);
-    } else {
-      hint('Cao trình này không có thang đi xuống');
-      setTimeout(() => hint(''), 2200);
-    }
+    wk.leo = null; wk.khoaThang = true; wk.yMat = undefined;
+    leoThang(gan ? gan.name : '');
     return;
   }
   wk.phim[e.key.toLowerCase()] = true;
@@ -7010,7 +7010,8 @@ function buocDiBo(dt) {
       if (d < xa) { xa = d; gan = o; }
     }
     if (wk.khoaThang && xa > 3.5) wk.khoaThang = false;
-    if (gan && xa < 2.2 && !wk.khoaThang) { batDauLeo(gan, wk.f, 1, gan.name); return; }
+    // (không tự leo nữa: lên/xuống bằng phím Z / X)
+    void gan;
     if (++wk.lan % 12 === 0) { doDuong(); veDuong(); }
     hudDiBo();
   }
