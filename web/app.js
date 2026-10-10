@@ -810,7 +810,7 @@ function luoiTuong(f) {
   const can = [];
   const ed = editsOf(f.page);
   (f.walls || []).forEach((r, i) => {
-    if (ed.delWall.indexOf(i) >= 0) return;
+    if (ed.delWall.indexOf(i) >= 0 || duoiLanCan(f, r)) return;
     const a = worldXZ(f, r[0], r[1]), b = worldXZ(f, r[2], r[3]);
     can.push([Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[0], b[0]), Math.max(a[1], b[1])]);
   });
@@ -874,7 +874,7 @@ function luoiTheoTuong(f) {
   }
   const ed = editsOf(f.page);
   (f.walls || []).forEach((r, i) => {
-    if (ed.delWall.indexOf(i) >= 0) return;
+    if (ed.delWall.indexOf(i) >= 0 || duoiLanCan(f, r)) return;
     const ngang = (r[2] - r[0]) >= (r[3] - r[1]);
     const p = worldXZ(f, ngang ? r[0] : (r[0] + r[2]) / 2, ngang ? (r[1] + r[3]) / 2 : r[1]);
     const q = worldXZ(f, ngang ? r[2] : (r[0] + r[2]) / 2, ngang ? (r[1] + r[3]) / 2 : r[3]);
@@ -1209,7 +1209,7 @@ function tuongCuaTang(f) {
   }
   const ed = editsOf(f.page);
   (f.walls || []).forEach((r, i) => {
-    if (ed.delWall.indexOf(i) >= 0) return;
+    if (ed.delWall.indexOf(i) >= 0 || duoiLanCan(f, r)) return;
     const ngang = (r[2] - r[0]) >= (r[3] - r[1]);
     const p = worldXZ(f, ngang ? r[0] : (r[0] + r[2]) / 2, ngang ? (r[1] + r[3]) / 2 : r[1]);
     const q = worldXZ(f, ngang ? r[2] : (r[0] + r[2]) / 2, ngang ? (r[1] + r[3]) / 2 : r[3]);
@@ -1455,7 +1455,7 @@ function buildMassing(f) {
   const boQuaBoc = typeof coBanVeRieng === 'function' && coBanVeRieng(f);
   (f.walls || []).forEach((r, i) => {
     if (boQuaBoc) return;
-    if (ed.delWall.indexOf(i) >= 0) return;
+    if (ed.delWall.indexOf(i) >= 0 || duoiLanCan(f, r)) return;
     (ed.toCab.indexOf(i) >= 0 ? cabSrc : wallSrc).push({ r: r, key: 'w:' + f.page + ':' + i });
   });
   (f.cabinets || []).forEach((r, i) => {
@@ -1678,7 +1678,7 @@ function tuongGanNhat(f, wx, wz) {
   };
   const ed = editsOf(f.page);
   (f.walls || []).forEach((r, i) => {
-    if (ed.delWall.indexOf(i) >= 0 || ed.toCab.indexOf(i) >= 0) return;
+    if (ed.delWall.indexOf(i) >= 0 || ed.toCab.indexOf(i) >= 0 || duoiLanCan(f, r)) return;
     const ngang = (r[2] - r[0]) >= (r[3] - r[1]);
     const day = (ngang ? r[3] - r[1] : r[2] - r[0]) * mpp();
     const [ax, az] = worldXZ(f, ngang ? r[0] : (r[0] + r[2]) / 2, ngang ? (r[1] + r[3]) / 2 : r[1]);
@@ -3106,7 +3106,7 @@ function tuongChuaCua(f, c) {
   if (state.massing && matWallShared.visible) {
     const ed = editsOf(f.page), ds = f.walls || [];
     for (let i = 0; i < ds.length; i++) {
-      if (ed.delWall.indexOf(i) >= 0 || ed.toCab.indexOf(i) >= 0) continue;
+      if (ed.delWall.indexOf(i) >= 0 || ed.toCab.indexOf(i) >= 0 || duoiLanCan(f, ds[i])) continue;
       const r = ds[i];
       const ngang = (r[2] - r[0]) >= (r[3] - r[1]);
       const day = ngang ? (r[3] - r[1]) : (r[2] - r[0]);
@@ -5388,6 +5388,27 @@ function coBanVeRieng(f) {
   return n >= 3;
 }
 
+// Tường bóc từ bản vẽ PDF mà người dùng đã VẼ LAN CAN đè lên: chỗ đó là lan
+// can chứ không phải tường -> coi như đã xoá (không dựng tường, không chặn đường).
+function duoiLanCan(f, r) {
+  if (!r) return false;
+  const ngang = (r[2] - r[0]) >= (r[3] - r[1]);
+  const a0 = ngang ? r[0] : r[1], a1 = ngang ? r[2] : r[3];
+  const g = ngang ? (r[1] + r[3]) / 2 : (r[0] + r[2]) / 2;
+  const dai = Math.max(1e-6, a1 - a0);
+  for (const o of customOf(f.page)) {
+    if (o.type !== 'rail') continue;
+    const rNgang = Math.abs(o.u1 - o.u0) >= Math.abs(o.v1 - o.v0);
+    if (rNgang !== ngang) continue;
+    const ga = ngang ? (o.v0 + o.v1) / 2 : (o.u0 + o.u1) / 2;
+    if (Math.abs(ga - g) > 12) continue;                 // không cùng tuyến
+    const b0 = Math.min(ngang ? o.u0 : o.v0, ngang ? o.u1 : o.v1);
+    const b1 = Math.max(ngang ? o.u0 : o.v0, ngang ? o.u1 : o.v1);
+    if ((Math.min(a1, b1 + 8) - Math.max(a0, b0 - 8)) / dai >= .6) return true;
+  }
+  return false;
+}
+
 function tuyenTuong(f) {
   const fp = footprintWorld(f);
   // BẢN VẼ CỦA NGƯỜI DÙNG LÀ CHÍNH: cao trình nào đã có tường tự vẽ thì chỉ lấy
@@ -5407,7 +5428,7 @@ function tuyenTuong(f) {
     }
     const ed = editsOf(f.page);
     (f.walls || []).forEach((r, i) => {
-      if (ed.delWall.indexOf(i) >= 0) return;         // tường đã xoá thì thôi
+      if (ed.delWall.indexOf(i) >= 0 || duoiLanCan(f, r)) return;   // tường đã xoá / đã thay bằng lan can
       const ngang = (r[2] - r[0]) >= (r[3] - r[1]);
       them(worldXZ(f, ngang ? r[0] : (r[0] + r[2]) / 2, ngang ? (r[1] + r[3]) / 2 : r[1]),
            worldXZ(f, ngang ? r[2] : (r[0] + r[2]) / 2, ngang ? (r[1] + r[3]) / 2 : r[3]),
@@ -5558,7 +5579,7 @@ function dungLuoi(f) {
     doan.push({ x0: a[0], z0: a[1], ux: (b[0] - a[0]) / L2, uz: (b[1] - a[1]) / L2, L: L2, t: t });
   };
   (f.walls || []).forEach((r, i) => {
-    if (ed.delWall.indexOf(i) >= 0) return;
+    if (ed.delWall.indexOf(i) >= 0 || duoiLanCan(f, r)) return;
     themDoan(worldXZ(f, r[0], r[1]), worldXZ(f, r[2], r[3]), .11);
   });
   for (const o of customOf(f.page)) {
