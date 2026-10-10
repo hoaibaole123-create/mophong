@@ -2341,7 +2341,8 @@ function rebuildCustom() {
             oCua.push([a0, a1, (c.h || 2.1) * state.explode]);
           }
           if (!oCua.length) {
-            mesh = new THREE.Mesh(new THREE.BoxGeometry(len, h, day), mat);
+            // chờm nửa bề dày ở hai đầu để góc tường khớp kín (không chừa khe)
+            mesh = new THREE.Mesh(new THREE.BoxGeometry(len + (state.plan ? 0 : day + .04), h, day), mat);
             mesh.position.set((ax + bx) / 2, y + h / 2, (az + bz) / 2);
             mesh.rotation.y = goc;
           } else {
@@ -2353,13 +2354,14 @@ function rebuildCustom() {
               m.position.set((t0 + t1) / 2 - len / 2, yTam, 0);
               mesh.add(m);
             };
-            let cur = 0;
+            const cho = state.plan ? 0 : day / 2 + .02;
+            let cur = -cho;
             for (const [a0, a1, hc] of oCua) {
               if (a0 > cur) dat(cur, a0, h / 2, h);
               dat(a0, a1, hc + (h - hc) / 2, h - hc);          // lanh tô trên ô cửa
               cur = Math.max(cur, a1);
             }
-            if (cur < len) dat(cur, len, h / 2, h);
+            if (cur < len + cho) dat(cur, len + cho, h / 2, h);
             mesh.position.set((ax + bx) / 2, y, (az + bz) / 2);
             mesh.rotation.y = goc;
           }
@@ -6269,6 +6271,9 @@ function vachCuaTang(f, gioiHan) {
     // đoạn tường đặc: xây suốt từ sàn lên trần
     const dat = (a, b, tu, den) => {
       if (b - a < .25 || den - tu < .05) return;
+      // đầu tuyến thì chờm thêm nửa bề dày: hai tường gặp góc khớp kín, không hở khe
+      if (a < .3) a -= w.day / 2 + .02;
+      if (b > w.L - .3) b += w.day / 2 + .02;
       const g = new THREE.BoxGeometry(b - a, den - tu, w.day);
       const mx = w.x0 + ux * (a + b) / 2, mz = w.z0 + uz * (a + b) / 2;
       const m = new THREE.Matrix4().makeRotationY(goc);
