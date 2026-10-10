@@ -2259,7 +2259,9 @@ function rebuildCustom() {
         mesh = makeMarker(lb, lb === 'CO224' ? MAT_BINH_CO224 : MAT_BINH_THEM);
         mesh.position.set(ax, y + .05, az);
         treoBinhLenTuong(mesh, f, ax, az, lb, y);
-        mesh.scale.setScalar(state.mkScale * (state.sel === 'c:' + o.id ? 1.8 : 1));
+        // đi bộ: đúng cỡ thật như bình bóc từ bản vẽ (xem applyVisibility)
+        const coBinh = (typeof wk !== 'undefined' && wk.on) ? 0.26 * state.explode : state.mkScale;
+        mesh.scale.setScalar(coBinh * (state.sel === 'c:' + o.id ? 1.8 : 1));
       } else {
         const h = (o.type === 'wall')
           ? (o.h > 0 ? o.h * state.explode : storey)
@@ -6350,44 +6352,76 @@ function vachCuaTang(f, gioiHan) {
       const cx = (a[0] + b[0]) / 2, cz = (a[1] + b[1]) / 2;
       if (gioiHan && !gioiHan(cx, cz)) continue;
       if (lo.some(r => trongDaGiac(r.pts, cx, cz))) continue;
-      let day = .22, gan = 1e9, wux = 0, wuz = 0, wx0 = 0, wz0 = 0;
-      for (const w of nguonVach) {                 // tường gần nhất: bề dày + trục
+      const ungVien = [];
+      // Cửa thường đứng ĐÚNG CHỖ HỞ giữa hai đoạn tường (tường dừng ở mép khuôn
+      // cửa), nét cửa trong bản vẽ lại hay là CÁNH mở, đầu bản lề nằm ở mép ô.
+      // Đo tới TRỤC tường kéo dài, cho tâm/đầu cửa vượt khỏi đầu đoạn tường tới
+      // hết bề rộng cửa — cửa đôi, cửa ở giữa khe hở cũng có lanh tô.
+      for (const w of nguonVach) {
         const ux = (w.x1 - w.x0) / w.L, uz = (w.z1 - w.z0) / w.L;
-        const t = Math.max(0, Math.min(w.L, (cx - w.x0) * ux + (cz - w.z0) * uz));
-        const dd = Math.hypot(cx - (w.x0 + ux * t), cz - (w.z0 + uz * t));
-        if (dd < gan) { gan = dd; day = w.day; wux = ux; wuz = uz; wx0 = w.x0; wz0 = w.z0; }
+        let tot = 1e9;
+        for (const q of [[cx, cz], a, b]) {
+          const t = (q[0] - w.x0) * ux + (q[1] - w.z0) * uz;
+          const vuot = Math.max(0, -t, t - w.L);
+          if (vuot > Math.max(rong + .4, 2.6)) continue;
+          const vg = Math.abs((q[0] - w.x0) * uz - (q[1] - w.z0) * ux);
+          // ưu tiên tường SONG SONG với nét cửa (cánh vuông góc thì bản lề đã sát trục)
+          const ss = Math.abs((b[0] - a[0]) * uz - (b[1] - a[1]) * ux) / rong > .5 ? .3 : 0;
+          const dd = vg + vuot * .2 + ss;
+          tot = Math.min(tot, dd);
+        }
+        if (tot <= 1.7) ungVien.push([tot, w]);
       }
-      // TƯỜNG CHỈ Ở KHUNG CỬA, KHÔNG Ở CÁNH CỬA: nét cửa trong bản vẽ nhiều khi
-      // là CÁNH mở 90° (vuông góc với tường). Khi đó khung cửa nằm dọc theo
-      // tường, bắt đầu từ bản lề — phải đắp theo hướng tường, không theo hướng
-      // cánh, nếu không mảng tường sẽ đứng chình ình trên cánh cửa.
-      // Không có bức tường nào trong 2,5 m thì KHÔNG đắp gì: chỗ đó vốn không có
-      // tường, và cũng không biết khung cửa quay hướng nào — đắp bừa là ra mảng
-      // tường dính trên cánh cửa.
-      if (gan > 0.9) continue;        // cửa không nằm trên tường nào -> không đụng vào tường
-      let px = cx, pz = cz, goc = -Math.atan2(b[1] - a[1], b[0] - a[0]);
+      // thử lần lượt từ tường gần nhất: tường nào nhận được ô cửa thì dùng
+      ungVien.sort((p1, p2) => p1[0] - p2[0]);
+      for (const [gan, w] of ungVien.slice(0, 6)) {
+      const day = w.day, wux = (w.x1 - w.x0) / w.L, wuz = (w.z1 - w.z0) / w.L, wx0 = w.x0, wz0 = w.z0;
+      // nét cửa có khi là mép cánh mở, cách trục tường tới ~1,6 m: chỉ nhận khi
+      // ngay đó có KHE HỞ trên tường (kiểm tra bên dưới), không thì bỏ
+      const doc = (q) => (q[0] - wx0) * wux + (q[1] - wz0) * wuz;     // toạ độ dọc trục tường
+      const lech = (q) => Math.abs((q[0] - wx0) * wuz - (q[1] - wz0) * wux);
+      let t0, t1;
       {
         const dx = (b[0] - a[0]) / rong, dz = (b[1] - a[1]) / rong;
         const cheo = Math.abs(dx * wuz - dz * wux);      // 0 = song song, 1 = vuông góc
-        if (cheo > 0.5) {                                // nét cửa là CÁNH
-          const ban = a;                                 // bản lề
-          const chieu = ((cx - ban[0]) * wux + (cz - ban[1]) * wuz) >= 0 ? 1 : -1;
-          px = ban[0] + wux * chieu * rong / 2;
-          pz = ban[1] + wuz * chieu * rong / 2;
-          goc = -Math.atan2(wuz, wux);
-        }
+        if (cheo > 0.5) {                                // nét cửa là CÁNH: bản lề là đầu sát tường
+          const ban = lech(a) <= lech(b) ? a : b, ngon = ban === a ? b : a;
+          const tb = doc(ban);
+          // cánh mở về phía nào của ô thì lấy theo phía tâm khe hở (xem dưới)
+          t0 = tb - rong; t1 = tb + rong;
+          void ngon;
+        } else { t0 = Math.min(doc(a), doc(b)); t1 = Math.max(doc(a), doc(b)); }
       }
-      // CHỐT CHẶN: kéo mảng tường về ĐÚNG TIM BỨC TƯỜNG. Dù nét cửa nghiêng ngả
-      // thế nào, mảng luôn nằm trong mặt phẳng tường, không thể đè lên cánh cửa.
-      {
-        const tt = (px - wx0) * wux + (pz - wz0) * wuz;
-        px = wx0 + wux * tt; pz = wz0 + wuz * tt;
-        goc = -Math.atan2(wuz, wux);
+      // Tìm KHE HỞ thật giữa hai đoạn tường cùng trục chứa ô cửa: lanh tô phủ
+      // kín đúng khe đó (không hụt hai bên, không đắp lên tường có sẵn).
+      const tm = (t0 + t1) / 2;
+      let trai = -1e9, phai = 1e9;
+      for (const w of nguonVach) {
+        const ux = (w.x1 - w.x0) / w.L, uz = (w.z1 - w.z0) / w.L;
+        if (Math.abs(ux * wuz - uz * wux) > 0.1) continue;           // không cùng hướng
+        if (lech([w.x0, w.z0]) > Math.max(.35, day)) continue;      // không cùng trục
+        const e0 = doc([w.x0, w.z0]), e1 = doc([w.x1, w.z1]);
+        const lo_ = Math.min(e0, e1), hi = Math.max(e0, e1);
+        if (hi <= tm + .05) trai = Math.max(trai, hi);
+        else if (lo_ >= tm - .05) phai = Math.min(phai, lo_);
       }
-      const g = new THREE.BoxGeometry(rong, cao - hC + .08, Math.max(.12, day * .96));
+      let s0, s1;
+      const coKhe = phai - trai <= Math.max(5, rong * 2 + .4) && trai > -1e8 && phai < 1e8;
+      if (gan > 0.9 && !coKhe) continue;           // thử tường kế tiếp           // xa trục mà không có khe -> không phải cửa của tường này
+      if (coKhe) {
+        s0 = trai - .03; s1 = phai + .03;               // phủ kín khe hở
+      } else if (Math.abs(Math.abs(b[0] - a[0]) * wuz - Math.abs(b[1] - a[1]) * wux) / rong > .5) {
+        const tb = doc(lech(a) <= lech(b) ? a : b);     // cánh, không thấy khe: lấy cả hai phía bản lề
+        s0 = tb - rong; s1 = tb + rong;
+      } else { s0 = t0 - .06; s1 = t1 + .06; }
+      const tg = (s0 + s1) / 2;
+      const px = wx0 + wux * tg, pz = wz0 + wuz * tg, goc = -Math.atan2(wuz, wux);
+      const g = new THREE.BoxGeometry(s1 - s0, cao - hC + .08, Math.max(.12, day * .96));
       const m = new THREE.Matrix4().makeRotationY(goc);
       m.setPosition(px, y + (hC - .08 + cao) / 2, pz);
       hinh.push(g.applyMatrix4(m));
+      break;
+      }
     }
   }
   return { L: L, hinh: hinh, y: y, cao: cao };
@@ -7007,6 +7041,40 @@ window.IALY = {
              chamO1m: dem(1.0), chamO25m: dem(2.5), chamO5m: dem(5.0),
              dayTuyen: tot ? +tot.w.day.toFixed(2) : null,
              soBuocTrungOCua: soBuoc, caoTang: +(floorHeight(f) * state.explode).toFixed(1) };
+  },
+  // Kiem tra lanh to tren MOI o cua (ca cua boc tu ban ve) o TAT CA cao trinh
+  lanhToMoiTang() {
+    if (!wk.on) return 'hay bat di bo';
+    const goc = wk.f, kq = [];
+    for (const f of state.data.floors) {
+      if (f.georef === 'standalone') continue;
+      doiTangDiBo(f);
+      const y = floorY(f), cao = Math.max(1.6, floorHeight(f) * state.explode - MASS.slab);
+      const ds = customOf(f.page).filter(o => o.type === 'door')
+        .map(o => [worldXZ(f, o.u0, o.v0), worldXZ(f, o.u1, o.v1), o.h])
+        .concat((f.doors || []).map(d => [worldXZ(f, d[0], d[1]), worldXZ(f, d[2], d[3]), 0]));
+      let thieu = [], tong = 0;
+      for (const [a, b, hh] of ds) {
+        const r = Math.hypot(b[0] - a[0], b[1] - a[1]); if (r < .2) continue;
+        const hC = Math.min(cao - .05, (hh || 2.1) * state.explode);
+        if (cao - hC < .3) continue;
+        tong++;
+        const ux = (b[0] - a[0]) / r, uz = (b[1] - a[1]) / r;
+        let ok = false;
+        // diem do: tam cua va diem cach ban le nua canh theo moi huong
+        const diem = [[(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]];
+        for (const [vx, vz] of [[-uz, ux], [uz, -ux]]) diem.push([a[0] + vx * r / 2, a[1] + vz * r / 2]);
+        for (const p of diem) for (const [nx, nz] of [[-uz, ux], [ux, uz]]) {
+          const rc = new THREE.Raycaster(new THREE.Vector3(p[0] - nx * 1.8, y + (hC + cao) / 2, p[1] - nz * 1.8),
+            new THREE.Vector3(nx, 0, nz), 0, 3.6);
+          if (rc.intersectObject(wkTuong, true).length || rc.intersectObject(customGroup, true).length) ok = true;
+        }
+        if (!ok) thieu.push([+a[0].toFixed(1), +a[1].toFixed(1)]);
+      }
+      kq.push({ el: f.elevation, cua: tong, thieuLanhTo: thieu.length, viDu: thieu.slice(0, 6) });
+    }
+    doiTangDiBo(goc);
+    return kq;
   },
   kiemLanhTo() {
     if (!wk.on) return 'hay bat di bo';
