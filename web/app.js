@@ -3388,11 +3388,37 @@ function makeStairTower(veDai, rong, caoTong, chon) {
     const rongBac = beVe;                            // bậc phủ kín nửa buồng thang
     for (let i = 0; i < nVe; i++) {
       const x = xBatDau + huong * (i + .5) * BAC;
-      const b = new THREE.Mesh(new THREE.BoxGeometry(BAC, r, rongBac), vl('bac'));
-      b.position.set(x, y + r * (i + .5), z);
+      // bậc kéo xuống chạm bản thang bên dưới (không còn là tấm phẳng lơ lửng)
+      const cao = r + .06;
+      const b = new THREE.Mesh(new THREE.BoxGeometry(BAC, cao, rongBac), vl('bac'));
+      b.position.set(x, y + r * (i + 1) - cao / 2, z);
       g.add(b);
     }
-    tayVin(xBatDau, xBatDau + huong * dai, z + huong * (beVe / 2 - .04), y, y + nVe * r);
+    // BẢN THANG: tấm bê tông nghiêng đỡ cả vế, mặt dưới phẳng như thang thật
+    {
+      const day = .16, doc = Math.atan2(nVe * r, dai), L = Math.hypot(dai, nVe * r);
+      const bt = new THREE.Mesh(new THREE.BoxGeometry(L, day, rongBac), vl('ban'));
+      const xg = xBatDau + huong * dai / 2, yg = y + nVe * r / 2;
+      bt.position.set(xg, yg - (day / 2) / Math.cos(doc) - .02, z);
+      bt.rotation.z = huong * doc;
+      g.add(bt);
+    }
+    // LAN CAN: tay vịn + trụ đứng mỗi ~0,9 m, đứng trên mặt bậc ở mép trong vế
+    const zVin = z + huong * (beVe / 2 - .04);
+    tayVin(xBatDau, xBatDau + huong * dai, zVin, y, y + nVe * r);
+    {
+      const buocTru = Math.max(1, Math.round(.9 / BAC));
+      for (let i = 0; i <= nVe; i += buocTru) {
+        const ii = Math.min(i, nVe - 1);
+        const x = xBatDau + huong * (ii + .5) * BAC;
+        const yMat = y + r * (ii + 1);
+        const yVin = y + .95 + (nVe * r) * ((ii + .5) * BAC / dai);
+        const h = Math.max(.3, yVin - yMat);
+        const tru = new THREE.Mesh(new THREE.CylinderGeometry(.018, .018, h, 8), vl('vin'));
+        tru.position.set(x, yMat + h / 2, zVin);
+        g.add(tru);
+      }
+    }
     y += nVe * r;
     if (v < soVe - 1) {                               // chiếu nghỉ rộng bằng cả ô thang
       const cn = new THREE.Mesh(new THREE.BoxGeometry(ts.cn, .16, W), vl('ban'));
@@ -6055,10 +6081,12 @@ function veDuong() {
     wkGroup.add(m);
   }
   const d = wk.duong[wk.duong.length - 1];
-  const cot = new THREE.Mesh(new THREE.CylinderGeometry(.35, .35, 3, 12),
-    new THREE.MeshBasicMaterial({ color: 0x35d07f, transparent: true, opacity: .35 }));
-  cot.position.set(d[0], y + 1.5, d[1]);
-  wkGroup.add(cot);
+  // điểm đến: vòng tròn mảnh nằm trên sàn (không dựng cột xanh cắm vào cầu thang)
+  const vong = new THREE.Mesh(new THREE.RingGeometry(.32, .42, 32),
+    new THREE.MeshBasicMaterial({ color: 0x35d07f, transparent: true, opacity: .7, side: THREE.DoubleSide }));
+  vong.rotation.x = -Math.PI / 2;
+  vong.position.set(d[0], y - .05, d[1]);
+  wkGroup.add(vong);
 }
 
 function hudDiBo() {
@@ -6751,6 +6779,82 @@ function choThoang(L, x0, z0, toiThieu) {
   return tot;
 }
 
+// Sau khi lên/xuống: bước ra khỏi buồng thang thêm một đoạn và QUAY LƯNG lại
+// cầu thang, nhìn ra sàn — không đứng kẹt giữa lan can, mặt dí vào tay vịn.
+function raKhoiThang(f) {
+  let tam = null, xa = 1e9;
+  for (const o of customOf(f.page)) {
+    if (o.type !== 'thangbo' && o.type !== 'stair') continue;
+    const a = worldXZ(f, o.u0, o.v0), b = worldXZ(f, o.u1, o.v1);
+    const c = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], d = Math.hypot(c[0] - wk.x, c[1] - wk.z);
+    if (d < xa) { xa = d; tam = c; }
+  }
+  if (!tam) return;
+  const ok = (x, z) => !wk.luoi || wk.luoi.trong(x, z);
+  const yMat = floorY(f) + CAO_MAT * state.explode;
+  // Đo bằng TIA vào tường/cửa đang hiện, xét cả MẶT TRONG: tia gặp mặt quay
+  // cùng chiều với tia nghĩa là điểm đứng đang nằm lọt trong khối tường.
+  const vatDo = [];
+  [wkTuong, customGroup].forEach(g => g.traverse(o => { if (o.isMesh && o.visible) vatDo.push(o); }));
+  const cuSide = new Map();
+  vatDo.forEach(o => { const m = o.material; if (m && !cuSide.has(m)) { cuSide.set(m, m.side); m.side = THREE.DoubleSide; } });
+  const rc = new THREE.Raycaster();
+  const tia = (x, z, dx, dz) => {
+    rc.set(new THREE.Vector3(x, yMat - .3, z), new THREE.Vector3(dx, 0, dz)); rc.far = 25;
+    const t = rc.intersectObjects(vatDo, false)[0];
+    if (!t) return { d: 25, trong: false };
+    const n = t.face ? t.face.normal.clone().transformDirection(t.object.matrixWorld) : null;
+    return { d: t.distance, trong: !!(n && n.x * dx + n.z * dz > .2) };
+  };
+  // khoảng trống trên đầu: không đứng dưới gầm vế thang / chiếu nghỉ phía trên
+  const vatTren = [];
+  [wkTuong, customGroup, wkThang].forEach(g => g.traverse(o => { if (o.isMesh && o.visible) vatTren.push(o); }));
+  const caoDau = 2.1 * state.explode;
+  const thoangDau = (x, z) => {
+    // dò thẳng đứng tại chỗ và 8 điểm quanh người (vế thang chếch bên cạnh)
+    for (const [ox, oz] of [[0, 0], [.7, 0], [-.7, 0], [0, .7], [0, -.7], [.5, .5], [-.5, .5], [.5, -.5], [-.5, -.5]]) {
+      rc.set(new THREE.Vector3(x + ox, floorY(f) + .3, z + oz), new THREE.Vector3(0, 1, 0)); rc.far = caoDau;
+      if (rc.intersectObjects(vatTren, false).length) return false;
+    }
+    // nhìn hơi chếch lên phía trước cũng không được đụng gầm thang ngay sát
+    return true;
+  };
+  const huong = []; for (let k = 0; k < 16; k++) { const g = k / 16 * Math.PI * 2; huong.push([Math.cos(g), Math.sin(g)]); }
+  let tot = null; const dem = { luoi: 0, dau: 0, trong: 0, sat: 0 };
+  const x0 = wk.x, z0 = wk.z;
+  for (const r of [0, .5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 5]) for (const [cx, cz] of (r ? huong : [[0, 0]])) {
+    const x = x0 + cx * r, z = z0 + cz * r;
+    if (!ok(x, z)) { dem.luoi++; continue; }
+    if (!thoangDau(x, z)) { dem.dau++; continue; }
+    let gan = 1e9, bi = false, best = null;
+    for (const [dx, dz] of huong) {
+      const t = tia(x, z, dx, dz);
+      if (t.trong) { bi = true; break; }
+      let dNhin = t.d;
+      for (const hh of [0, .35, .8]) {                 // ngang mắt, trên mắt (chiếu nghỉ, gầm thang)
+        rc.set(new THREE.Vector3(x, yMat + hh, z), new THREE.Vector3(dx, 0, dz)); rc.far = 25;
+        const tren = rc.intersectObjects(vatTren, false)[0];
+        if (tren) dNhin = Math.min(dNhin, tren.distance);
+      }
+      gan = Math.min(gan, dNhin);                      // trống quanh người, cả tầm mắt
+      // hướng nhìn: không quay vào buồng thang
+      const vx = x - tam[0], vz = z - tam[1], vL = Math.hypot(vx, vz) || 1;
+      if ((dx * vx + dz * vz) / vL < -.2) continue;
+      if (!best || dNhin > best.d) best = { d: dNhin, dx: dx, dz: dz };
+    }
+    if (bi) { dem.trong++; continue; }
+    if (gan < .8 || !best) { dem.sat++; continue; }
+    const diem = best.d + Math.min(gan, 1.5) * 2 - r * .3;   // thoáng, nhìn xa, gần đầu thang
+    if (!tot || diem > tot.diem) tot = { diem: diem, x: x, z: z, dx: best.dx, dz: best.dz };
+  }
+  cuSide.forEach((sd, m) => { m.side = sd; });
+  wk._ra = { tot: tot, tam: tam, x0: x0, z0: z0, loai: dem };
+  if (!tot) return;
+  wk.x = tot.x; wk.z = tot.z;
+  wk.yaw = Math.atan2(-tot.dx, -tot.dz); wk.pitch = 0;
+  wk.yawN = wk.yaw; wk.pitchN = 0; wk.vx = wk.vz = 0;
+}
+
 function leoThang(ten) {
   const ds = state.data.floors.filter(x => x.georef !== 'standalone')
     .sort((a, b) => a.elevation - b.elevation);
@@ -6791,6 +6895,7 @@ function leoThang(ten) {
     const t = choThoang(wk.luoi, x, z) || choThoang(wk.luoi, x, z, 8);
     if (t) { wk.x = t.x; wk.z = t.z; doDuong(); }
   }
+  raKhoiThang(tren);
   veDuong(); hudDiBo();
   hint('Đã lên ' + tren.name + ' — EL. ' + tren.elevation.toFixed(2) + ' m');
   setTimeout(() => hint(''), 2500);
@@ -6846,6 +6951,7 @@ function xuongThang(ten) {
     const t = choThoang(wk.luoi, x, z) || choThoang(wk.luoi, x, z, 8);
     if (t) { wk.x = t.x; wk.z = t.z; doDuong(); }
   }
+  raKhoiThang(duoi);
   veDuong(); hudDiBo();
   hint('Đã xuống ' + duoi.name + ' — EL. ' + duoi.elevation.toFixed(2) + ' m');
   setTimeout(() => hint(''), 2500);
@@ -6962,7 +7068,7 @@ function buocLeo(dt) {
 }
 
 function buocDiBo(dt) {
-  if (!wk.on) return;
+  if (!wk.on || wk.camTu) return;
   if (wk.leo) { buocLeo(dt); return; }
   const p = wk.phim;
   let tx = 0, tz = 0;
@@ -7106,6 +7212,10 @@ window.IALY = {
                nhom: h.object === wkTuong || wkTuong.getObjectById(h.object.id) ? 'wkTuong' : customGroup.getObjectById(h.object.id) ? 'custom' : massGroup.getObjectById(h.object.id) ? 'mass' : '?' }; }); },
   // mat trung nhau (z-fighting) quanh o cua: ban tia vuong goc qua khuon cua
   lechVach(b) { MAT_VACH.polygonOffset = !!b; MAT_VACH.needsUpdate = true; return b; },
+  camTu(x, y, z, tx, ty, tz) { if (x === undefined) { wk.camTu = false; return 'tat'; }
+    wk.camTu = true; const y0 = floorY(wk.f); camPersp.position.set(x, y0 + y, z); camPersp.lookAt(tx, y0 + ty, tz); return 1; },
+  anTuong(an) { wkTuong.visible = !an; customGroup.traverse(o => { if (o.userData && o.userData.obj && o.userData.obj.type === 'wall') o.visible = !an; }); return an; },
+  ra() { return wk._ra; },
   matTrung() { const f = wk.f, y = floorY(f), kq = [];
     const vat = [wkTuong, customGroup, massGroup];
     for (const o of customOf(f.page)) { if (o.type !== 'door') continue;
