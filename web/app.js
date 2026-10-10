@@ -6452,6 +6452,7 @@ function vaoDiBo() {
     if (tot) { wk.x = tot.x; wk.z = tot.z; }
   }
   wk.yaw = 0; wk.pitch = 0; wk.leo = null;
+  wk.vx = wk.vz = 0; wk.yMat = undefined; wk.yawN = undefined; wk.buoc = 0; wk.nhunBd = 0;
   // chỉ hiện đúng cao trình đang đứng -> không nhìn thấy các cao trình khác
   wk.visCu = new Set(state.visible);
   wk.massCu = state.massing;
@@ -6860,7 +6861,9 @@ function buocLeo(dt) {
   L.s += toc;
   const nhun = Math.sin(L.s * 7.5) * 0.018 * state.explode;   // nhún theo nhịp bước
   wk.yaw = -Math.atan2(q[2] - p[2], q[0] - p[0]) - Math.PI / 2;
-  camPersp.position.set(wk.x, y + CAO_MAT * state.explode + nhun, wk.z);
+  wk.yMat = y + CAO_MAT * state.explode;
+  wk.yawN = wk.yaw; wk.pitchN = wk.pitch; wk.vx = 0; wk.vz = 0;
+  camPersp.position.set(wk.x, wk.yMat + nhun, wk.z);
   camPersp.rotation.order = 'YXZ';
   camPersp.rotation.set(wk.pitch, wk.yaw, 0);
   const el = document.querySelector('#wkHud');
@@ -6889,16 +6892,35 @@ function buocDiBo(dt) {
   if (p['s'] || p['arrowdown']) tz -= 1;
   if (p['a'] || p['arrowleft']) tx -= 1;
   if (p['d'] || p['arrowright']) tx += 1;
-  const v = (p['shift'] ? 3.4 : 1.5) * dt * state.explode;
+  // Có QUÁN TÍNH: tăng/giảm tốc dần như người thật thay vì giật cục khi bấm/nhả phím
+  const vMax = (p['shift'] ? 3.4 : 1.5) * state.explode;
+  let mx = 0, mz = 0;
   if (tx || tz) {
     const L = Math.hypot(tx, tz);
     const sx = Math.sin(wk.yaw), cy = Math.cos(wk.yaw);
-    const dx = (tz / L) * -sx + (tx / L) * cy;
-    const dz = (tz / L) * -cy - (tx / L) * sx;
-    const nx = wk.x + dx * v, nz = wk.z + dz * v;
-    const ok = (x, z) => !wk.luoi || wk.luoi.trong(x, z);
-    if (ok(nx, wk.z)) wk.x = nx;                   // trượt dọc tường thay vì dính cứng
-    if (ok(wk.x, nz)) wk.z = nz;
+    mx = (tz / L) * -sx + (tx / L) * cy;
+    mz = (tz / L) * -cy - (tx / L) * sx;
+  }
+  const k = 1 - Math.exp(-dt * ((tx || tz) ? 9 : 12));
+  wk.vx = (wk.vx || 0) + (mx * vMax - (wk.vx || 0)) * k;
+  wk.vz = (wk.vz || 0) + (mz * vMax - (wk.vz || 0)) * k;
+  const tocDo = Math.hypot(wk.vx, wk.vz);
+  if (tocDo < 0.01 * state.explode) { wk.vx = 0; wk.vz = 0; }
+  if (tocDo > 0) {
+    const nx = wk.x + wk.vx * dt, nz = wk.z + wk.vz * dt;
+    // thân người có bề ngang ~0,25 m: không để mắt dí sát vào tường
+    const R = 0.25 * state.explode;
+    const ok = (x, z) => !wk.luoi || (wk.luoi.trong(x, z) &&
+      wk.luoi.trong(x + R, z) && wk.luoi.trong(x - R, z) &&
+      wk.luoi.trong(x, z + R) && wk.luoi.trong(x, z - R));
+    const ok0 = (x, z) => !wk.luoi || wk.luoi.trong(x, z);
+    const dangKet = !ok(wk.x, wk.z);               // đang đứng sát nét thì chỉ xét điểm chân
+    const thu = dangKet ? ok0 : ok;
+    if (thu(nx, wk.z)) wk.x = nx; else wk.vx *= 0.2; // trượt dọc tường thay vì dính cứng
+    if (thu(wk.x, nz)) wk.z = nz; else wk.vz *= 0.2;
+    wk.buoc = (wk.buoc || 0) + tocDo * dt;
+  }
+  if (tx || tz) {
     // tới sát chân thang -> bước lên từng bậc. Sau khi vừa lên/xuống xong thì
     // phải rời khỏi khu vực thang (3,5 m) rồi quay lại mới leo tiếp, để không bị
     // cuốn lên thẳng một mạch tới cao trình trên cùng.
@@ -6914,9 +6936,27 @@ function buocDiBo(dt) {
     if (++wk.lan % 12 === 0) { doDuong(); veDuong(); }
     hudDiBo();
   }
-  camPersp.position.set(wk.x, floorY(wk.f) + CAO_MAT * state.explode, wk.z);
+  // nhún đầu theo nhịp bước, biên độ theo tốc độ; đứng lại thì êm dần về 0
+  const tiLe = Math.min(1, tocDo / (1.5 * state.explode));
+  wk.nhunBd = (wk.nhunBd || 0) + (tiLe - (wk.nhunBd || 0)) * Math.min(1, dt * 8);
+  const pha = (wk.buoc || 0) / state.explode * Math.PI * 1.25;   // ~1 bước / 0,8 m
+  const nhunY = Math.abs(Math.sin(pha)) * 0.035 * state.explode * wk.nhunBd;
+  const nhunX = Math.sin(pha) * 0.012 * state.explode * wk.nhunBd;
+  // độ cao mắt chuyển mượt (sau khi lên/xuống thang không bị giật)
+  const yDich = floorY(wk.f) + CAO_MAT * state.explode;
+  if (wk.yMat === undefined || Math.abs(wk.yMat - yDich) > 30 * state.explode) wk.yMat = yDich;
+  wk.yMat += (yDich - wk.yMat) * Math.min(1, dt * 6);
+  // hướng nhìn mượt: camera đuổi theo hướng chuột thay vì nhảy theo từng xung
+  if (wk.yawN === undefined) { wk.yawN = wk.yaw; wk.pitchN = wk.pitch; }
+  let dy = wk.yaw - wk.yawN;
+  dy = Math.atan2(Math.sin(dy), Math.cos(dy));
+  const kn = Math.min(1, dt * 18);
+  wk.yawN += dy * kn; wk.pitchN += (wk.pitch - wk.pitchN) * kn;
+  const cx = Math.cos(wk.yawN), sx2 = Math.sin(wk.yawN);
+  camPersp.position.set(wk.x + cx * nhunX, wk.yMat + nhunY - 0.02 * state.explode * wk.nhunBd,
+                        wk.z - sx2 * nhunX);
   camPersp.rotation.order = 'YXZ';
-  camPersp.rotation.set(wk.pitch, wk.yaw, 0);
+  camPersp.rotation.set(wk.pitchN, wk.yawN, Math.sin(pha) * 0.004 * wk.nhunBd);
 }
 
 
