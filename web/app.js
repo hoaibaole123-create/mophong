@@ -69,6 +69,7 @@ dir.shadow.camera.near = 1; dir.shadow.camera.far = 400;
 dir.shadow.camera.left = -60; dir.shadow.camera.right = 60;
 dir.shadow.camera.top = 60; dir.shadow.camera.bottom = -60;
 dir.shadow.bias = -0.0015;
+dir.shadow.normalBias = 0.04;              // chống sọc bóng trên mặt tường
 // đèn hắt phụ: gờ tường, mép bậc thang có sáng tối, không bẹt như giấy
 const denPhu = new THREE.DirectionalLight(0xdfe7f0, 0.35);
 denPhu.position.set(-70, 45, -60);
@@ -6182,7 +6183,10 @@ function vlDiBo(bat) {
 
 // ---- dựng VÁCH ĐẶC theo nét bản vẽ cho chế độ đi bộ: mọi chỗ là nét tường đều
 // thành khối thật, nên nhìn không thủng và đi không xuyên qua được.
-const MAT_VACH = new THREE.MeshStandardMaterial({ color: 0xd7d2c6, roughness: .88, metalness: .02 });
+// Vách đặc trùng khít với tường tự vẽ: đẩy lùi độ sâu một chút để chỗ hai lớp
+// trùng nhau luôn hiện tường tự vẽ, không nhấp nháy đậm nhạt khi xoay nhìn.
+const MAT_VACH = new THREE.MeshStandardMaterial({ color: 0xd7d2c6, roughness: .88, metalness: .02,
+  polygonOffset: true, polygonOffsetFactor: 2, polygonOffsetUnits: 4 });
 const MAT_TRAN = new THREE.MeshStandardMaterial({ color: 0xb9b5ab, roughness: .98,
   side: THREE.DoubleSide });
 const wkTuong = new THREE.Group();
@@ -7087,6 +7091,21 @@ window.IALY = {
       while (o) { duong.push((o.name || o.type) + (o.userData && o.userData.obj ? ':' + o.userData.obj.type + ':' + o.userData.obj.id : '')); o = o.parent; }
       return { d: +h.distance.toFixed(2), p: [h.point.x, h.point.y, h.point.z].map(v => +v.toFixed(2)), duong: duong.slice(0, 4).join(' < '),
                nhom: h.object === wkTuong || wkTuong.getObjectById(h.object.id) ? 'wkTuong' : customGroup.getObjectById(h.object.id) ? 'custom' : massGroup.getObjectById(h.object.id) ? 'mass' : '?' }; }); },
+  // mat trung nhau (z-fighting) quanh o cua: ban tia vuong goc qua khuon cua
+  lechVach(b) { MAT_VACH.polygonOffset = !!b; MAT_VACH.needsUpdate = true; return b; },
+  matTrung() { const f = wk.f, y = floorY(f), kq = [];
+    const vat = [wkTuong, customGroup, massGroup];
+    for (const o of customOf(f.page)) { if (o.type !== 'door') continue;
+      const a = worldXZ(f, o.u0, o.v0), b = worldXZ(f, o.u1, o.v1), L = Math.hypot(b[0] - a[0], b[1] - a[1]); if (L < .2) continue;
+      const ux = (b[0] - a[0]) / L, uz = (b[1] - a[1]) / L;
+      for (const [tt, hh] of [[.5, 2.3], [.02, 1.0], [.98, 1.0], [.5, 2.12]]) {
+        const px = a[0] + ux * L * tt, pz = a[1] + uz * L * tt;
+        const rc = new THREE.Raycaster(new THREE.Vector3(px + uz * 2, y + hh * state.explode, pz - ux * 2), new THREE.Vector3(-uz, 0, ux), 0, 4);
+        const h = vat.flatMap(g => rc.intersectObject(g, true)).sort((p, q) => p.distance - q.distance);
+        let trung = 0; for (let i = 1; i < h.length; i++) if (Math.abs(h[i].distance - h[i - 1].distance) < .004 && h[i].object !== h[i - 1].object) trung++;
+        if (trung) kq.push({ cua: o.id, tt, hh, trung, d: h.slice(0, 6).map(q => +q.distance.toFixed(3) + (q.object.material && q.object.material.name ? q.object.material.name : '')) });
+      } }
+    return kq; },
   lanhToMoiTang() {
     if (!wk.on) return 'hay bat di bo';
     const goc = wk.f, kq = [];
