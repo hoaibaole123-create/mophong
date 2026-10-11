@@ -32,8 +32,10 @@ async function docFile(id) {
     if (!m) continue;
     const thang = String(+m[1]);
     const rows = XLSX.utils.sheet_to_json(wb.Sheets[ten], { header: 1, raw: true });
+    let nguoiTruoc = '';                                     // o "nguoi quan ly" hay gop nhieu dong
     for (const row of rows) {
       const tb = row[1];
+      if (typeof tb === 'string' && /cao\s*trình/i.test(tb)) nguoiTruoc = '';   // sang cao trinh moi
       if (typeof tb !== 'string' || tb.indexOf('▼') < 0) continue;
       if (!row[4] && !row[5]) continue;                      // chua kiem tra thang nay
       const ngay = ngayVN(row[4]);
@@ -42,8 +44,9 @@ async function docFile(id) {
       const mt = ngay.match(/^\d{2}\/(\d{2})\//);
       if (mt && String(+mt[1]) !== thang) continue;
       (ra[thang] = ra[thang] || {})[chuan(tb)] = {
-        ngay: ngay, kq: ketQua(row[5]), nguoi: String(row[6] || '').trim(),
+        ngay: ngay, kq: ketQua(row[5]), nguoi: (String(row[6] || '').trim() || nguoiTruoc),
       };
+      nguoiTruoc = ra[thang][chuan(tb)].nguoi;
     }
   }
   return ra;

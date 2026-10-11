@@ -5083,7 +5083,9 @@ function veTheKiemTra(khoa, page, tenPT, ky, ghiChu) {
   for (let i = 0; i < 12; i++) {
     // Nguoi dung tu dien thi uu tien; chua dien thi lay theo phieu da nap.
     const tay = d.hang[i] || {};
-    const r = (tay.kq || tay.nguoi || tay.ngay) ? tay : (ngoai[String(i + 1)] || {});
+    // tung o rieng: o nao go tay thi lay o do, o de trong thi lay theo bang/phieu
+    const tu = ngoai[String(i + 1)] || {};
+    const r = { ngay: tay.ngay || tu.ngay || '', kq: tay.kq || tu.kq || '', nguoi: tay.nguoi || tu.nguoi || '' };
     const thang = String(i + 1).padStart(2, '0');
     // Co ngay kiem tra that thi ghi ngay do; chua co thi de "…..." cho dien tay.
     // O ngay chi go NGAY, phan thang/nam in san nhu tren the that.
