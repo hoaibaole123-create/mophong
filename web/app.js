@@ -1942,6 +1942,41 @@ function relayout() {
 // Cho phép vẽ thêm tường, khối hộp thiết bị / máy biến áp và bình chữa cháy
 // ngay trên mặt bằng của cao trình đang chọn. Dữ liệu lưu trong localStorage
 // và xuất được ra tệp thiet-ke.json.
+// ---- SƠN TƯỜNG KHI ĐI BỘ: chân tường xám đậm, mảng sơn chân tường xám xanh tới
+// 1,2 m có đường chỉ, phía trên trắng ngà có vân loang nhẹ. Tính theo cao độ
+// thật so với mặt sàn của cao trình đang đứng (uSan), chỉ bật khi đi bộ (uBat).
+const SON_TUONG = { uBat: { value: 0 }, uSan: { value: 0 }, uTL: { value: 1.6 } };
+function sonTuong(m) {
+  m.onBeforeCompile = sh => {
+    Object.assign(sh.uniforms, SON_TUONG);
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vTG;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvTG = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', `#include <common>
+varying vec3 vTG; uniform float uBat; uniform float uSan; uniform float uTL;
+float hs3(vec3 p){ return fract(sin(dot(p, vec3(12.9898,78.233,37.719))) * 43758.5453); }
+float vn(vec3 p){ vec3 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f);
+  return mix(mix(mix(hs3(i),hs3(i+vec3(1,0,0)),f.x),mix(hs3(i+vec3(0,1,0)),hs3(i+vec3(1,1,0)),f.x),f.y),
+             mix(mix(hs3(i+vec3(0,0,1)),hs3(i+vec3(1,0,1)),f.x),mix(hs3(i+vec3(0,1,1)),hs3(i+vec3(1,1,1)),f.x),f.y),f.z); }`)
+      .replace('#include <color_fragment>', `#include <color_fragment>
+if (uBat > 0.5) {
+  float h = (vTG.y - uSan) / uTL;                 // cao độ thật (m) trên mặt sàn
+  vec3 tren = vec3(0.925, 0.910, 0.870);           // trắng ngà
+  vec3 duoi = vec3(0.690, 0.735, 0.700);           // xám xanh sơn chân tường
+  vec3 chi  = vec3(0.520, 0.565, 0.535);           // đường chỉ
+  vec3 chan = vec3(0.330, 0.330, 0.320);           // chân tường
+  vec3 c = h < 0.15 ? chan : (h < 1.17 ? duoi : (h < 1.21 ? chi : tren));
+  float n = vn(vTG * 1.3) * 0.6 + vn(vTG * 5.0) * 0.4;   // vân sơn loang nhẹ
+  c *= 0.965 + n * 0.07;
+  diffuseColor.rgb = c;
+}`);
+  };
+  m.customProgramCacheKey = () => 'sonTuong';
+  m.needsUpdate = true;
+}
+
+sonTuong(matWallShared);
 const MAT_CUSTOM = {
   wall: matWallShared,          // dùng chung vật liệu với tường bóc từ bản vẽ -> nhìn đồng nhất
   box: matCab,                  // khối thiết bị = cùng màu tủ/thiết bị của bản vẽ
@@ -6189,6 +6224,7 @@ function vlDiBo(bat) {
     // Trong nhà thì luôn phải thấy tường, nên bật lại bằng được.
     matWallShared.visible = true; matSlab.visible = true;
     matWallShared.color.setHex(0xd7d2c6); matWallShared.needsUpdate = true;
+    SON_TUONG.uBat.value = 1; SON_TUONG.uTL.value = state.explode;
     _vlCu.khac = [];
     [matDoor, MAT_CUSTOM.box, MAT_CUSTOM.tra, MAT_CUSTOM.rail, MAT_CUSTOM.stair,
      MAT_CUSTOM.roof, matCab].forEach(m => {
@@ -6203,6 +6239,7 @@ function vlDiBo(bat) {
     if (_vlCu.tuong.v !== undefined) matWallShared.visible = _vlCu.tuong.v;
     matWallShared.transparent = _vlCu.tuong.t; matWallShared.opacity = _vlCu.tuong.o;
     matWallShared.color.setHex(_vlCu.tuong.c); matWallShared.needsUpdate = true;
+    SON_TUONG.uBat.value = 0;
     (_vlCu.khac || []).forEach(k => {
       k.m.transparent = k.t; k.m.opacity = k.o; k.m.needsUpdate = true;
     });
@@ -6225,6 +6262,7 @@ function vlDiBo(bat) {
 // trùng nhau luôn hiện tường tự vẽ, không nhấp nháy đậm nhạt khi xoay nhìn.
 const MAT_VACH = new THREE.MeshStandardMaterial({ color: 0xd7d2c6, roughness: .88, metalness: .02,
   polygonOffset: true, polygonOffsetFactor: 2, polygonOffsetUnits: 4 });
+sonTuong(MAT_VACH);
 const MAT_TRAN = new THREE.MeshStandardMaterial({ color: 0xb9b5ab, roughness: .98,
   side: THREE.DoubleSide });
 const wkTuong = new THREE.Group();
@@ -7068,6 +7106,7 @@ function buocLeo(dt) {
 }
 
 function buocDiBo(dt) {
+  if (wk.on && wk.f) SON_TUONG.uSan.value = floorY(wk.f);
   if (!wk.on || wk.camTu) return;
   if (wk.leo) { buocLeo(dt); return; }
   const p = wk.phim;
