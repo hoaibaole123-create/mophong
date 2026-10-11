@@ -1951,7 +1951,9 @@ function sonTuong(m) {
     Object.assign(sh.uniforms, SON_TUONG);
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vTG;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvTG = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+      // tường bóc từ PDF dựng bằng InstancedMesh: phải nhân cả instanceMatrix,
+      // nếu không cao độ tính sai -> cả bức tường thành một màu chân tường xám
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvec4 pTG = vec4(transformed, 1.0);\n#ifdef USE_INSTANCING\npTG = instanceMatrix * pTG;\n#endif\nvTG = (modelMatrix * pTG).xyz;');
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>
 varying vec3 vTG; uniform float uBat; uniform float uSan; uniform float uTL;
