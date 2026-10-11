@@ -4984,6 +4984,15 @@ fetch(duongDL('ketqua.json?v=') + Date.now())
   .then(r => (r.ok ? r.json() : {}))
   .then(d => { KQ_PHIEU = d || {}; })
   .catch(() => { KQ_PHIEU = {}; });
+// Ket qua TU DONG tu bang theo doi hang thang (Excel tren Google Drive cua don
+// vi), doc qua ham /api/kiemtra tren Vercel. Khoa theo TEN BINH (ky ma hieu).
+// Chay cuc bo khong co ham nay thi bo qua, chi dung ketqua.json.
+let KQ_API = {};
+const chuanTen = s => String(s || '').replace(/\s+/g, '');
+fetch('/api/kiemtra')
+  .then(r => (r.ok ? r.json() : {}))
+  .then(d => { KQ_API = d || {}; })
+  .catch(() => { KQ_API = {}; });
 
 function theOf(page) {
   const e = editsOf(page);
@@ -5065,7 +5074,12 @@ function veTheKiemTra(khoa, page, tenPT, ky, ghiChu) {
        '<input data-o="ngaySD" value="' + ngay + '" style="text-align:left;width:40%" placeholder="dd/mm/yyyy"></div>';
   h += '<table><tr><th>Ngày, tháng<br>kiểm tra</th><th>Kết quả<br>kiểm tra</th>' +
        '<th>Người, đơn vị<br>kiểm tra</th></tr>';
-  const ngoai = KQ_PHIEU[khoa] || {};
+  // bang hang thang (tu dong) de len ket qua nap tu phieu PDF cua cung thang
+  const ngoai = Object.assign({}, KQ_PHIEU[khoa] || {});
+  for (const t in KQ_API) {
+    const v = KQ_API[t] && KQ_API[t][chuanTen(ky)];
+    if (v) ngoai[t] = v;
+  }
   for (let i = 0; i < 12; i++) {
     // Nguoi dung tu dien thi uu tien; chua dien thi lay theo phieu da nap.
     const tay = d.hang[i] || {};

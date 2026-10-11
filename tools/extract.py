@@ -424,6 +424,11 @@ def main():
     themBinhThieu(floors, items)
     themFM200(floors, items)
     danhSoBinh(floors, items)
+    # TÊN THEO BẢNG KIỂM TRA HÀNG THÁNG (chuẩn của đơn vị): đổi tên, thêm/xoá cho
+    # đủ đúng danh sách trong tools/ten_bang.json — xem tools/ten_bang.py
+    import ten_bang
+    if os.path.exists(ten_bang.DS_JSON):
+        ten_bang.ap_ten(floors, items, json.load(open(ten_bang.DS_JSON, encoding="utf-8")))
 
     data = dict(
         project="Nhà máy thuỷ điện Ialy mở rộng (2×180MW) — Bình chữa cháy xách tay",
