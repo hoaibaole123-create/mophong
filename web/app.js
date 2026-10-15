@@ -2272,7 +2272,7 @@ function rebuildCustom() {
         mesh.rotation.y = (o.rot || 0);
       } else if (o.type === 'thangbo') {
         const dx = bx - ax, dz = bz - az;
-        const ve = Math.max(.6, Math.hypot(dx, dz));
+        const ve = daiVeThang(f, o);
         mesh = makeStairTower(ve, rongThangTheoTuong(f, o), (o.h || 3) * state.explode,
                               state.sel === 'c:' + o.id);
         mesh.position.set((ax + bx) / 2, y, (az + bz) / 2);
@@ -3359,12 +3359,45 @@ const MAT_THANG = {
 // thang, chiếu nghỉ rộng bằng cả ô -> thang vẽ đầy ô, không còn khoảng trống.
 const THANG_BAC = 0.30;          // bề rộng mặt bậc
 const THANG_CAO = 0.19;          // chiều cao bậc tối đa
+// Chiều dài vế thang: nét vẽ nhiều khi chỉ là một đoạn ngắn giữa buồng thang
+// -> thang bị chia thành cả chục vế ngắn chồng zíc-zắc. Đo dọc trục vế tới hai
+// bức tường đầu buồng thang, trừ chỗ cho chiếu nghỉ/chiếu tới, rồi lấy cái dài hơn.
+function daiVeThang(f, o) {
+  const a = worldXZ(f, o.u0, o.v0), b = worldXZ(f, o.u1, o.v1);
+  const L = Math.max(.6, Math.hypot(b[0] - a[0], b[1] - a[1]));
+  const ux = (b[0] - a[0]) / L, uz = (b[1] - a[1]) / L;
+  const cx = (a[0] + b[0]) / 2, cz = (a[1] + b[1]) / 2;
+  const doBen = (dau) => {
+    let gan = 1e9;
+    for (const w of tuyenTuong(f)) {
+      if (w.khoi) continue;
+      const wx = (w.x1 - w.x0) / w.L, wz = (w.z1 - w.z0) / w.L;
+      const cheo = ux * wz - uz * wx;
+      if (Math.abs(cheo) < 0.3) continue;              // tường dọc theo vế -> bỏ
+      const t = ((w.x0 - cx) * wz - (w.z0 - cz) * wx) / cheo;
+      if (t * dau <= 0) continue;
+      const px = cx + ux * t, pz = cz + uz * t;
+      const tw = (px - w.x0) * wx + (pz - w.z0) * wz;
+      if (tw < -.2 || tw > w.L + .2) continue;
+      gan = Math.min(gan, Math.abs(t) - w.day / 2);
+    }
+    return gan;
+  };
+  const nua = Math.min(doBen(1), doBen(-1));
+  if (nua > 30) return L;                                 // không thấy tường đầu buồng
+  const cn = Math.max(1.0, Math.min(1.6, rongThangTheoTuong(f, o) * 0.5));
+  const coDuoc = 2 * nua - 2 * cn - .1;                  // chừa chiếu hai đầu
+  return Math.max(L, Math.min(6, coDuoc));
+}
+
 function thongSoThang(veDai, rong, caoTong) {
   const W = Math.max(.8, rong || 1.26);
   const HT = Math.max(.3, caoTong || 3);
   const dai = Math.max(1.2, veDai);                          // vế dài đúng nét đã vẽ
   const nMax = Math.max(3, Math.floor(dai / THANG_BAC));     // số bậc lọt trong vế
-  const tongBac = Math.max(2, Math.ceil(HT / THANG_CAO));    // ít bậc nhất có thể
+  // chiều cao bậc giãn theo hệ số kéo cao tầng: số bậc đúng như thang thật,
+  // không bị nhân thêm vế chỉ vì tầng được kéo cao để dễ nhìn
+  const tongBac = Math.max(2, Math.ceil(HT / (THANG_CAO * Math.max(1, state.explode || 1))));
   const soVe = Math.max(1, Math.ceil(tongBac / nMax));
   const nVe = Math.max(2, Math.ceil(tongBac / soVe));        // bậc mỗi vế
   // mặt bậc giãn ra cho vế phủ kín chiều dài đã vẽ -> bậc to hơn, ít bậc hơn
@@ -5853,7 +5886,7 @@ function oThangCuaTang(f) {          // hình chữ nhật chiếm chỗ của t
   const them = (fo, o) => {
     const a = worldXZ(f, o.u0, o.v0), b = worldXZ(f, o.u1, o.v1);
     const cx = (a[0] + b[0]) / 2, cz = (a[1] + b[1]) / 2;
-    const L = Math.max(.6, Math.hypot(b[0] - a[0], b[1] - a[1]));
+    const L = daiVeThang(fo, o);
     const ts = thongSoThang(L, o.w || 1.26, (o.h || 3) * state.explode);
     ra.push({ x: cx, z: cz, ang: Math.atan2(b[1] - a[1], b[0] - a[0]),
               nua: ts.dai / 2 + ts.cn, ngang: ts.W / 2 });
@@ -5864,7 +5897,7 @@ function oThangCuaTang(f) {          // hình chữ nhật chiếm chỗ của t
     .sort((a, b) => b.elevation - a.elevation);
   const duoi = ds.find(x => x.elevation < f.elevation);
   if (duoi) for (const o of customOf(duoi.page))
-    if (o.type === 'thangbo' || o.type === 'stair') them(f, o);
+    if (o.type === 'thangbo' || o.type === 'stair') them(duoi, o);
   return ra;
 }
 
@@ -6576,7 +6609,7 @@ function dungThangDuoi(f) {
     if (o.type !== 'thangbo' && o.type !== 'stair') continue;
     const a = worldXZ(duoi, o.u0, o.v0), b = worldXZ(duoi, o.u1, o.v1);
     const dx = b[0] - a[0], dz = b[1] - a[1];
-    const ve = Math.max(.6, Math.hypot(dx, dz));
+    const ve = daiVeThang(duoi, o);
     const m = gopNhom(makeStairTower(ve, rongThangTheoTuong(duoi, o), (o.h || 3) * state.explode, false));
     m.position.set((a[0] + b[0]) / 2, y + (o.base || 0) * state.explode, (a[1] + b[1]) / 2);
     m.rotation.y = -Math.atan2(dz, dx) + (o.rot || 0);
@@ -6803,9 +6836,9 @@ function viTriRaThang(f, ten) {
   if (!o || !wk.luoi) return null;
   const a = worldXZ(f, o.u0, o.v0), b = worldXZ(f, o.u1, o.v1);
   const cx = (a[0] + b[0]) / 2, cz = (a[1] + b[1]) / 2;
-  const L0 = Math.max(.6, Math.hypot(b[0] - a[0], b[1] - a[1]));
-  const ts = thongSoThang(L0, o.w || 1.26, (o.h || 3) * state.explode);
-  const ux = (b[0] - a[0]) / L0, uz = (b[1] - a[1]) / L0;
+  const L1 = Math.max(.6, Math.hypot(b[0] - a[0], b[1] - a[1]));
+  const ts = thongSoThang(daiVeThang(f, o), o.w || 1.26, (o.h || 3) * state.explode);
+  const ux = (b[0] - a[0]) / L1, uz = (b[1] - a[1]) / L1;
   const d = ts.dai / 2 + ts.cn * .6;
   const thu = [[cx + ux * d, cz + uz * d], [cx - ux * d, cz - uz * d], [cx, cz]];
   let tot = null;
@@ -7033,7 +7066,7 @@ function duongLeo(o, fTang) {
   const a = worldXZ(fTang, o.u0, o.v0), b = worldXZ(fTang, o.u1, o.v1);
   const cx = (a[0] + b[0]) / 2, cz = (a[1] + b[1]) / 2;
   const ang = -Math.atan2(b[1] - a[1], b[0] - a[0]) + (o.rot || 0);
-  const veDai = Math.max(.6, Math.hypot(b[0] - a[0], b[1] - a[1]));
+  const veDai = daiVeThang(fTang, o);
   const ts = thongSoThang(veDai, o.w || 1.26, (o.h || 3) * state.explode);
   const W = ts.W, BAC = ts.BAC, nVe = ts.nVe, soVe = ts.soVe, r = ts.r, dai = ts.dai;
   const beVe = ts.ve;
