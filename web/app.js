@@ -2323,6 +2323,7 @@ function rebuildCustom() {
                               state.sel === 'c:' + o.id);
         mesh.position.set((ax + bx) / 2, y, (az + bz) / 2);
         mesh.rotation.y = -Math.atan2(dz, dx) + (o.rot || 0);
+        mesh.scale.x = benCuaThang(f, [ax, az], [bx, bz]);   // chiếu tới ngang sàn quay ra cửa
       } else if (o.type === 'beacon') {
         mesh = makeBeacon((o.h || .18) * state.explode, state.sel === 'c:' + o.id);
         mesh.scale.setScalar(Math.max(1, state.exitScale * .8) *
@@ -3532,7 +3533,11 @@ function thongSoThang(veDai, rong, caoTong) {
   // chiều cao bậc giãn theo hệ số kéo cao tầng: số bậc đúng như thang thật,
   // không bị nhân thêm vế chỉ vì tầng được kéo cao để dễ nhìn
   const tongBac = Math.max(2, Math.ceil(HT / (THANG_CAO * Math.max(1, state.explode || 1))));
-  const soVe = Math.max(1, Math.ceil(tongBac / nMax));
+  // SỐ VẾ CHẴN: lên hết một tầng thì về lại ĐÚNG PHÍA bắt đầu — chiếu tới ngang
+  // sàn luôn ở cùng một đầu buồng thang (phía cửa vào), không có chiếu nghỉ
+  // lưng chừng chắn ngang cửa.
+  let soVe = Math.max(2, Math.ceil(tongBac / nMax));
+  if (soVe % 2) soVe++;
   const nVe = Math.max(2, Math.ceil(tongBac / soVe));        // bậc mỗi vế
   // mặt bậc giãn ra cho vế phủ kín chiều dài đã vẽ -> bậc to hơn, ít bậc hơn
   // Chiếu nghỉ / chiếu tới dài vừa phải (1,0–1,6 m). Trước lấy bằng cả bề ngang
@@ -3575,6 +3580,28 @@ function rongThangTheoTuong(f, o) {
   const HE = 0.10;                        // chừa khe mỗi bên, không cho bậc chạm/xuyên tường
   const r = (doBen(1) - HE) + (doBen(-1) - HE);
   return Math.max(rongVe, Math.min(6, r));
+}
+
+// Đầu nào của buồng thang là CỬA VÀO? Lấy cửa gần nhất quanh ô thang, chiếu lên
+// trục thang a->b: cửa nằm phía b thì trả -1 (lật tháp thang để chiếu tới ngang
+// sàn quay ra cửa), không thì 1.
+function benCuaThang(f, a, b) {
+  const cx = (a[0] + b[0]) / 2, cz = (a[1] + b[1]) / 2;
+  const L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+  const ux = (b[0] - a[0]) / L, uz = (b[1] - a[1]) / L;
+  const ed = editsOf(f.page);
+  const ds = customOf(f.page).filter(o => o.type === 'door')
+    .map(o => [worldXZ(f, o.u0, o.v0), worldXZ(f, o.u1, o.v1)])
+    .concat((f.doors || []).filter((d, i) => ed.delDoor.indexOf(i) < 0)
+      .map(d => [worldXZ(f, d[0], d[1]), worldXZ(f, d[2], d[3])]));
+  let tot = null;
+  for (const [p, q] of ds) {
+    const gx = (p[0] + q[0]) / 2, gz = (p[1] + q[1]) / 2;
+    const d = Math.hypot(gx - cx, gz - cz);
+    if (d > Math.max(6, L / 2 + 4)) continue;
+    if (!tot || d < tot.d) tot = { d: d, t: (gx - cx) * ux + (gz - cz) * uz };
+  }
+  return tot && tot.t > 0 ? -1 : 1;
 }
 
 function makeStairTower(veDai, rong, caoTong, chon, boChieuTren) {
@@ -6849,6 +6876,8 @@ function dungThangDuoi(f) {
     }
     m.position.set(tx, y + (o.base || 0) * state.explode, tz);
     m.rotation.y = -Math.atan2(dz, dx) + (o.rot || 0);
+    // vế cuối tới tầng đang đứng phải đổ ra phía CỬA của tầng này
+    m.scale.x = benCuaThang(f, [tx - dx / 2, tz - dz / 2], [tx + dx / 2, tz + dz / 2]);
     wkThang.add(m);
   }
 }
@@ -7526,7 +7555,7 @@ window.IALY = {
   },
   // Kiem tra lanh to tren MOI o cua (ca cua boc tu ban ve) o TAT CA cao trinh
   // dat nguoi di bo toi (x,z) va huong nhin -> dung de chup kiem tra
-  dat(x, z, yaw, pitch) { wk.x = x; wk.z = z; wk.yaw = yaw || 0; wk.pitch = pitch || 0;
+  dat(x, z, yaw, pitch) { wk.x = x; wk.z = z; wk.yaw = yaw || 0; wk.pitch = pitch || 0; wk.yMat = undefined;
     wk.yawN = wk.yaw; wk.pitchN = wk.pitch; wk.vx = wk.vz = 0; return [wk.x, wk.z]; },
   // chup khung 3D dang hien (dataURL PNG)
   anh() { if (wk.on) buocDiBo(0.016); veKhung();
@@ -7552,6 +7581,16 @@ window.IALY = {
     wk.camTu = true; const y0 = floorY(wk.f); camPersp.position.set(x, y0 + y, z); camPersp.lookAt(tx, y0 + ty, tz); return 1; },
   anTuong(an) { wkTuong.visible = !an; customGroup.traverse(o => { if (o.userData && o.userData.obj && o.userData.obj.type === 'wall') o.visible = !an; }); return an; },
   ra() { return wk._ra; },
+  // diem dung truoc cua vao moi buong thang (phia chieu toi ngang san), nhin vao thang
+  cuaThang() { const f = wk.f, kq = [];
+    for (const o of customOf(f.page)) { if (o.type !== 'thangbo') continue;
+      const a = worldXZ(f, o.u0, o.v0), b = worldXZ(f, o.u1, o.v1);
+      const L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1, ux = (b[0] - a[0]) / L, uz = (b[1] - a[1]) / L;
+      const s = benCuaThang(f, a, b), ve = daiVeThang(f, o), cx = (a[0] + b[0]) / 2, cz = (a[1] + b[1]) / 2;
+      const k = -s * (ve / 2 + 1.6 + 2.2);
+      const x = cx + ux * k, z = cz + uz * k;
+      kq.push({ ten: o.name, x: x, z: z, yaw: Math.atan2(-(cx - x), -(cz - z)) }); }
+    return kq; },
   // cac lo noi manh san tu mo o cao trinh dang di bo (toa do ban ve)
   loMo() { const f = wk.f, k = 1 / mpp(); return ((wk.luoi && wk.luoi.moThem) || []).map(p => [+(p[0] * k).toFixed(0), +(p[1] * k).toFixed(0)]); },
   buongThang() { const f = wk.f, kq = [];
