@@ -7151,6 +7151,52 @@ function choThoang(L, x0, z0, toiThieu) {
 
 // Sau khi lên/xuống: bước ra khỏi buồng thang thêm một đoạn và QUAY LƯNG lại
 // cầu thang, nhìn ra sàn — không đứng kẹt giữa lan can, mặt dí vào tay vịn.
+// Đổi tầng xong thì ĐỨNG NGAY CỬA BUỒNG THANG, phía ngoài, mặt quay vào cao
+// trình — như vừa bước từ cầu thang ra. Cửa = cửa gần ô thang nhất.
+function raCuaThang(f, tam) {
+  const ed = editsOf(f.page);
+  const ds = customOf(f.page).filter(o => o.type === 'door')
+    .map(o => [worldXZ(f, o.u0, o.v0), worldXZ(f, o.u1, o.v1)])
+    .concat((f.doors || []).filter((d, i) => ed.delDoor.indexOf(i) < 0)
+      .map(d => [worldXZ(f, d[0], d[1]), worldXZ(f, d[2], d[3])]));
+  const ung = [];
+  for (const [p, q] of ds) {
+    const L = Math.hypot(q[0] - p[0], q[1] - p[1]);
+    if (L < .4) continue;
+    const gx = (p[0] + q[0]) / 2, gz = (p[1] + q[1]) / 2;
+    const d = Math.hypot(gx - tam[0], gz - tam[1]);
+    if (d > 9) continue;
+    let nx = -(q[1] - p[1]) / L, nz = (q[0] - p[0]) / L;      // pháp tuyến ô cửa
+    if ((gx - tam[0]) * nx + (gz - tam[1]) * nz < 0) { nx = -nx; nz = -nz; }   // quay ra ngoài buồng thang
+    ung.push({ d: d, gx: gx, gz: gz, nx: nx, nz: nz });
+  }
+  ung.sort((u, v) => u.d - v.d);
+  const ok = (x, z) => !wk.luoi || wk.luoi.trong(x, z);
+  // nhìn được bao xa theo một hướng (dò trên lưới đi lại)
+  const thoang = (x, z, dx, dz) => {
+    let t = 0;
+    while (t < 25 && ok(x + dx * (t + .3), z + dz * (t + .3))) t += .3;
+    return t;
+  };
+  for (const u of ung) {
+    for (const k of [1.3, 1.0, 1.8, 2.4]) {
+      const x = u.gx + u.nx * k, z = u.gz + u.nz * k;
+      if (!ok(x, z)) continue;
+      // hướng nhìn: thẳng ra khỏi cửa, nếu trước mặt là tường (ra hành lang
+      // chạy ngang) thì quay theo hướng hành lang thoáng nhất
+      const g0 = Math.atan2(u.nz, u.nx);
+      let tot = null;
+      for (const lech of [0, .45, -.45, .9, -.9, 1.57, -1.57]) {
+        const dx = Math.cos(g0 + lech), dz = Math.sin(g0 + lech);
+        const diem = Math.min(12, thoang(x, z, dx, dz)) - Math.abs(lech) * 1.2;
+        if (!tot || diem > tot.diem) tot = { diem: diem, dx: dx, dz: dz };
+      }
+      return { x: x, z: z, yaw: Math.atan2(-tot.dx, -tot.dz) };
+    }
+  }
+  return null;
+}
+
 function raKhoiThang(f) {
   let tam = null, xa = 1e9;
   for (const o of customOf(f.page)) {
@@ -7160,6 +7206,13 @@ function raKhoiThang(f) {
     if (d < xa) { xa = d; tam = c; }
   }
   if (!tam) return;
+  const cua = raCuaThang(f, tam);
+  if (cua) {
+    wk.x = cua.x; wk.z = cua.z; wk.yaw = wk.yawN = cua.yaw; wk.pitch = wk.pitchN = 0;
+    wk.vx = wk.vz = 0; wk.yMat = undefined;
+    wk._ra = { cua: true, x: cua.x, z: cua.z };
+    return;
+  }
   const ok = (x, z) => !wk.luoi || wk.luoi.trong(x, z);
   const yMat = floorY(f) + CAO_MAT * state.explode;
   // Đo bằng TIA vào tường/cửa đang hiện, xét cả MẶT TRONG: tia gặp mặt quay
