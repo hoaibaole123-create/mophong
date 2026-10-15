@@ -3443,7 +3443,7 @@ function rongThangTheoTuong(f, o) {
   return Math.max(rongVe, Math.min(6, r));
 }
 
-function makeStairTower(veDai, rong, caoTong, chon) {
+function makeStairTower(veDai, rong, caoTong, chon, boChieuTren) {
   const g = new THREE.Group();
   const vl = k => chon ? MAT_SEL : MAT_THANG[k];
   const ts = thongSoThang(veDai, rong, caoTong);
@@ -3516,7 +3516,9 @@ function makeStairTower(veDai, rong, caoTong, chon) {
   ban(-dai / 2 - ts.cn / 2 + .02, 0);                 // đầu dưới: khít sàn tầng dưới
   const huongCuoi = (soVe % 2) ? 1 : -1;              // chiều của vế cuối
   const xCuoi = huongCuoi > 0 ? dai / 2 : -dai / 2;
-  ban(xCuoi + huongCuoi * (ts.cn / 2 - .02), HT);     // đầu trên: khít sàn tầng trên
+  // đầu trên: khít sàn tầng trên. Thang tầng dưới nhìn từ tầng trên thì bỏ, vì
+  // tầng trên đã có sàn + chiếu của chính nó (hai tấm chồng lệch nhau trông rất kỳ)
+  if (!boChieuTren) ban(xCuoi + huongCuoi * (ts.cn / 2 - .02), HT);
   return g;
 }
 
@@ -6597,11 +6599,62 @@ function vachCuaTang(f, gioiHan) {
 // dựng hình các vế thang từ cao trình dưới lên, để đứng ở tầng trên nhìn thấy
 const wkThang = new THREE.Group();
 scene.add(wkThang);
+// ---- BẢNG TÊN CAO TRÌNH: nền xanh dương, chữ trắng, gắn lên bức tường gần lối
+// ra mỗi cầu thang, cao ngang tầm mắt. Dựng cùng lúc với thang (mỗi lần đổi tầng).
+const _texBang = {};
+function texBangCaoTrinh(f) {
+  const k = f.page;
+  if (_texBang[k]) return _texBang[k];
+  const c = document.createElement('canvas'); c.width = 768; c.height = 288;
+  const g = c.getContext('2d');
+  g.fillStyle = '#0b5cad'; g.fillRect(0, 0, 768, 288);
+  g.strokeStyle = '#ffffff'; g.lineWidth = 10; g.strokeRect(14, 14, 740, 260);
+  g.fillStyle = '#ffffff'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.font = 'bold 120px Arial, sans-serif';
+  g.fillText('EL. ' + f.elevation.toFixed(2), 384, 112);
+  g.font = 'bold 50px Arial, sans-serif';
+  const ten = (f.name || '').replace(/^EL\.?\s*[\d.,]+\s*[—-]\s*/, '').toUpperCase();
+  g.fillText(ten.length > 26 ? ten.slice(0, 26) + '…' : ten, 384, 215);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+  return (_texBang[k] = t);
+}
+function datBangCaoTrinh(f, nhom) {
+  const tuong = tuyenTuong(f).filter(w => !w.khoi);
+  const vl = new THREE.MeshBasicMaterial({ map: texBangCaoTrinh(f) });
+  const da = [];
+  for (const o of customOf(f.page)) {
+    if (o.type !== 'thangbo' && o.type !== 'stair') continue;
+    const a = worldXZ(f, o.u0, o.v0), b = worldXZ(f, o.u1, o.v1);
+    const cx = (a[0] + b[0]) / 2, cz = (a[1] + b[1]) / 2;
+    // bức tường gần tâm cầu thang nhất (trong 6 m), đủ dài để treo bảng
+    let tot = null;
+    for (const w of tuong) {
+      if (w.L < 1.4) continue;
+      const ux = (w.x1 - w.x0) / w.L, uz = (w.z1 - w.z0) / w.L;
+      const t = Math.max(.7, Math.min(w.L - .7, (cx - w.x0) * ux + (cz - w.z0) * uz));
+      const px = w.x0 + ux * t, pz = w.z0 + uz * t, d = Math.hypot(cx - px, cz - pz);
+      if (d < 6 && (!tot || d < tot.d)) tot = { d, px, pz, ux, uz, day: w.day };
+    }
+    if (!tot) continue;
+    if (da.some(q => Math.hypot(q[0] - tot.px, q[1] - tot.pz) < 2)) continue;   // không treo trùng
+    da.push([tot.px, tot.pz]);
+    // pháp tuyến quay về phía cầu thang, bảng áp sát mặt tường
+    let nx = -tot.uz, nz = tot.ux;
+    if ((cx - tot.px) * nx + (cz - tot.pz) * nz < 0) { nx = -nx; nz = -nz; }
+    const bang = new THREE.Mesh(new THREE.PlaneGeometry(1.2, .45), vl);
+    bang.position.set(tot.px + nx * (tot.day / 2 + .02), floorY(f) + 1.7 * state.explode, tot.pz + nz * (tot.day / 2 + .02));
+    bang.rotation.y = Math.atan2(nx, nz);
+    nhom.add(bang);
+  }
+}
+
 function dungThangDuoi(f) {
   wkThang.traverse(o => { if (o.geometry) o.geometry.dispose(); });
   wkThang.clear();
   const ds = state.data.floors.filter(x => x.georef !== 'standalone')
     .sort((a, b) => b.elevation - a.elevation);
+  datBangCaoTrinh(f, wkThang);           // bảng tên cao trình đang đứng
   const duoi = ds.find(x => x.elevation < f.elevation);
   if (!duoi) return;
   const y = floorY(duoi);
@@ -6610,8 +6663,19 @@ function dungThangDuoi(f) {
     const a = worldXZ(duoi, o.u0, o.v0), b = worldXZ(duoi, o.u1, o.v1);
     const dx = b[0] - a[0], dz = b[1] - a[1];
     const ve = daiVeThang(duoi, o);
-    const m = gopNhom(makeStairTower(ve, rongThangTheoTuong(duoi, o), (o.h || 3) * state.explode, false));
-    m.position.set((a[0] + b[0]) / 2, y + (o.base || 0) * state.explode, (a[1] + b[1]) / 2);
+    const m = gopNhom(makeStairTower(ve, rongThangTheoTuong(duoi, o), (o.h || 3) * state.explode, false, true));
+    // khớp tâm với thang CÙNG TÊN ở tầng đang đứng (nét vẽ mỗi tầng lệch vài chục
+    // cm -> hai tháp thang chồng lệch, lan can/chiếu đè chéo lên nhau)
+    let tx = (a[0] + b[0]) / 2, tz = (a[1] + b[1]) / 2;
+    const ma = (o.name || '').match(/CT\.\d/);
+    if (ma) for (const q of customOf(f.page)) {
+      if ((q.type !== 'thangbo' && q.type !== 'stair') || (q.name || '').indexOf(ma[0]) < 0) continue;
+      const qa = worldXZ(f, q.u0, q.v0), qb = worldXZ(f, q.u1, q.v1);
+      const qx = (qa[0] + qb[0]) / 2, qz = (qa[1] + qb[1]) / 2;
+      if (Math.hypot(qx - tx, qz - tz) < 1.5) { tx = qx; tz = qz; }
+      break;
+    }
+    m.position.set(tx, y + (o.base || 0) * state.explode, tz);
     m.rotation.y = -Math.atan2(dz, dx) + (o.rot || 0);
     wkThang.add(m);
   }
@@ -7316,6 +7380,16 @@ window.IALY = {
     wk.camTu = true; const y0 = floorY(wk.f); camPersp.position.set(x, y0 + y, z); camPersp.lookAt(tx, y0 + ty, tz); return 1; },
   anTuong(an) { wkTuong.visible = !an; customGroup.traverse(o => { if (o.userData && o.userData.obj && o.userData.obj.type === 'wall') o.visible = !an; }); return an; },
   ra() { return wk._ra; },
+  buongThang() { const f = wk.f, kq = [];
+    for (const o of customOf(f.page)) { if (o.type !== 'thangbo' && o.type !== 'stair') continue;
+      const a = worldXZ(f, o.u0, o.v0), b = worldXZ(f, o.u1, o.v1), cx = (a[0] + b[0]) / 2, cz = (a[1] + b[1]) / 2;
+      const do4 = {}; for (const [k, dx, dz] of [['+x', 1, 0], ['-x', -1, 0], ['+z', 0, 1], ['-z', 0, -1]]) {
+        let gan = 99; for (const w of tuyenTuong(f)) { if (w.khoi) continue; const wx = (w.x1 - w.x0) / w.L, wz = (w.z1 - w.z0) / w.L;
+          const cheo = dx * wz - dz * wx; if (Math.abs(cheo) < .3) continue; const t = ((w.x0 - cx) * wz - (w.z0 - cz) * wx) / cheo;
+          if (t <= 0) continue; const tw = (cx + dx * t - w.x0) * wx + (cz + dz * t - w.z0) * wz; if (tw < -.2 || tw > w.L + .2) continue; gan = Math.min(gan, t); }
+        do4[k] = +gan.toFixed(2); }
+      kq.push({ id: o.id, ten: o.name, a: a.map(v => +v.toFixed(2)), b: b.map(v => +v.toFixed(2)), h: o.h, w: o.w, dai: +daiVeThang(f, o).toFixed(2), rong: +rongThangTheoTuong(f, o).toFixed(2), tuong: do4 }); }
+    return kq; },
   matTrung() { const f = wk.f, y = floorY(f), kq = [];
     const vat = [wkTuong, customGroup, massGroup];
     for (const o of customOf(f.page)) { if (o.type !== 'door') continue;
