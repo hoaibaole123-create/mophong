@@ -3310,7 +3310,42 @@ function makeHongNgoai(chon) {
     }
     const napDen = tru(.068, .03, 'den'); napDen.rotation.z = Math.PI / 2; napDen.position.x = s * .275; ra.add(napDen);
   }
+  g.add(makeHopVoi(chon).translateX(1.0));                                     // hop voi dung canh
   g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  return g;
+}
+
+// ---- HOP CHUA CHAY ngoai troi dat canh hong: tu thep do dung tren 4 chan, mai
+// chia ra, cua co o kinh den ghi "HOP CHUA CHAY / FIRE HOSE REEL", khoa ben trai.
+let _texHopVoi = null;
+function texHopVoi() {
+  if (_texHopVoi) return _texHopVoi;
+  const c = document.createElement('canvas'); c.width = 256; c.height = 320;
+  const x = c.getContext('2d');
+  x.fillStyle = '#151515'; x.fillRect(0, 0, 256, 320);
+  x.fillStyle = '#fff'; x.textAlign = 'center'; x.font = 'bold 34px Arial';
+  x.fillText('HỘP CHỮA CHÁY', 128, 120); x.fillText('FIRE HOSE REEL', 128, 200);
+  _texHopVoi = new THREE.CanvasTexture(c);
+  _texHopVoi.colorSpace = THREE.SRGBColorSpace;
+  return _texHopVoi;
+}
+function makeHopVoi(chon) {
+  const g = new THREE.Group();
+  const vl = chon ? MAT_SEL : MAT_TRU.do;
+  const W = .6, H = .8, D = .22, CHAN = .25;
+  const than = new THREE.Mesh(new THREE.BoxGeometry(W, H, D), vl);
+  than.position.y = CHAN + H / 2; g.add(than);
+  const mai = new THREE.Mesh(new THREE.BoxGeometry(W + .06, .03, D + .05), vl);
+  mai.position.y = CHAN + H + .015; g.add(mai);
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+    const ch = new THREE.Mesh(new THREE.BoxGeometry(.04, CHAN, .04), vl);
+    ch.position.set(sx * (W / 2 - .03), CHAN / 2, sz * (D / 2 - .03)); g.add(ch);
+  }
+  const kinh = new THREE.Mesh(new THREE.PlaneGeometry(W * .5, H * .55),
+    chon ? MAT_SEL : new THREE.MeshStandardMaterial({ map: texHopVoi(), roughness: .15, metalness: .3 }));
+  kinh.position.set(.03, CHAN + H * .55, D / 2 + .003); g.add(kinh);
+  const khoa = new THREE.Mesh(new THREE.BoxGeometry(.03, .07, .015), MAT_TRU.den);
+  khoa.position.set(-W / 2 + .07, CHAN + H * .55, D / 2 + .008); g.add(khoa);
   return g;
 }
 
