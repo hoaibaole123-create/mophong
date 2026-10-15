@@ -1,5 +1,10 @@
 import * as THREE from 'three';
 import { OrbitControls } from './vendor/OrbitControls.js';
+import { RoomEnvironment } from './vendor/addons/environments/RoomEnvironment.js';
+import { EffectComposer } from './vendor/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from './vendor/addons/postprocessing/RenderPass.js';
+import { GTAOPass } from './vendor/addons/postprocessing/GTAOPass.js';
+import { OutputPass } from './vendor/addons/postprocessing/OutputPass.js';
 
 const $ = s => document.querySelector(s);
 const el = (t, c, h) => { const e = document.createElement(t); if (c) e.className = c; if (h !== undefined) e.innerHTML = h; return e; };
@@ -76,6 +81,41 @@ denPhu.position.set(-70, 45, -60);
 scene.add(denPhu);
 dir.position.set(60, 120, 40);
 scene.add(dir);
+
+// ---- KHUNG CANH CHAN THAT cho goc nhin thu nhat:
+// - anh moi truong phong (RoomEnvironment): son bong, thep, kinh co phan chieu
+// - bong toi goc tuong / chan vat (GTAO) de vat "ngoi" xuong san, khong lo lung
+// Chi bat khi di bo; khung nhin tong the giu nhu cu cho nhe may.
+let ENV_TRONG = null, ketHop = null, passAO = null;
+function moiTruongTrong() {
+  if (!ENV_TRONG) {
+    const pm = new THREE.PMREMGenerator(renderer);
+    ENV_TRONG = pm.fromScene(new RoomEnvironment(), .04).texture;
+    pm.dispose();
+  }
+  return ENV_TRONG;
+}
+function boKetHop() {
+  if (ketHop) return ketHop;
+  const w = view.clientWidth || 800, h = view.clientHeight || 600;
+  ketHop = new EffectComposer(renderer);
+  ketHop.addPass(new RenderPass(scene, camera));
+  passAO = new GTAOPass(scene, camera, w, h);
+  passAO.updateGtaoMaterial({ radius: 1.2, distanceExponent: 1.2, thickness: 2, scale: 1.4, samples: 12 });
+  passAO.updatePdMaterial({ radius: 6, rings: 2, samples: 12 });
+  passAO.blendIntensity = 1;
+  ketHop.addPass(passAO);
+  ketHop.addPass(new OutputPass());
+  ketHop.setSize(w, h);
+  return ketHop;
+}
+function veKhung() {
+  if (wk.on && state.aoDiBo !== false) {
+    const k = boKetHop();
+    k.passes[0].camera = camera; passAO.camera = camera;
+    k.render();
+  } else renderer.render(scene, camera);
+}
 
 const floorGroup = new THREE.Group();
 const markerGroup = new THREE.Group();
@@ -5409,6 +5449,7 @@ function resize() {
   camOrtho.top = nuaKhung; camOrtho.bottom = -nuaKhung;
   camOrtho.left = -nuaKhung * a; camOrtho.right = nuaKhung * a;
   camOrtho.updateProjectionMatrix();
+  if (ketHop) ketHop.setSize(w, h);
 }
 
 // ---- chế độ MẶT BẰNG 2D: khoá xoay, nhìn vuông góc từ trên xuống
@@ -5577,7 +5618,7 @@ fetch(duongDL('plant.json?v=') + Date.now()).then(r => r.json()).then(d => {
     if (nay - (loop.nen || 0) > 500) { loop.nen = nay; canVe = true; }
     if (wk.on || canVe || choiLai > 0) {
       if (choiLai > 0) choiLai--; else canVe = false;
-      renderer.render(scene, camera);
+      veKhung();
     }
   })();
 }).catch(e => {
@@ -6319,24 +6360,49 @@ function hudDiBo() {
 
 
 // ---- ảnh gạch lát sàn 600×600 cho chế độ đi bộ (vẽ bằng canvas, không cần tệp ngoài)
-let TEX_GACH = null;
+let TEX_GACH = null, TEX_GACH_NHAM = null;
+// Sàn đá granite nhân tạo 600×600: mỗi viên một sắc hơi khác, hạt đá lấm tấm
+// nhiều cỡ, mạch vữa mảnh. Kèm ảnh độ nhám riêng: mặt viên hơi bóng, mạch vữa nhám
+// -> sàn ánh lên mờ mờ theo ánh sáng như sàn thật.
 function texGach() {
   if (TEX_GACH) return TEX_GACH;
-  const c = document.createElement('canvas'); c.width = c.height = 256;
-  const g = c.getContext('2d');
-  g.fillStyle = '#c9c6bd'; g.fillRect(0, 0, 256, 256);
-  for (let i = 0; i < 2600; i++) {                 // vân đá lấm tấm
-    g.fillStyle = 'rgba(0,0,0,' + (Math.random() * .05) + ')';
-    g.fillRect(Math.random() * 256, Math.random() * 256, 2, 2);
+  const N = 1024, O = N / 2, c = document.createElement('canvas'); c.width = c.height = N;
+  const r = document.createElement('canvas'); r.width = r.height = N;
+  const g = c.getContext('2d'), gr = r.getContext('2d');
+  let hat = 7;
+  const rnd = () => (hat = (hat * 16807) % 2147483647) / 2147483647;
+  gr.fillStyle = '#5a5a5a'; gr.fillRect(0, 0, N, N);
+  for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++) {
+    const l = 160 + rnd() * 6 | 0;
+    g.fillStyle = `rgb(${l},${l - 3},${l - 10})`; g.fillRect(i * O, j * O, O, O);
+    for (let k = 0; k < 2200; k++) {                   // hạt đá
+      const x = i * O + rnd() * O, y = j * O + rnd() * O, d = rnd();
+      const m = d < .5 ? 120 + rnd() * 50 : d < .85 ? 225 + rnd() * 25 : 70 + rnd() * 40;
+      g.fillStyle = `rgba(${m | 0},${m - 4 | 0},${m - 10 | 0},${.25 + rnd() * .5})`;
+      const s = 1 + rnd() * (d < .95 ? 2.5 : 5);
+      g.fillRect(x, y, s, s);
+    }
+    const gd = g.createRadialGradient(i * O + O * rnd(), j * O + O * rnd(), 10, i * O + O / 2, j * O + O / 2, O);
+    gd.addColorStop(0, 'rgba(255,255,255,.05)'); gd.addColorStop(1, 'rgba(0,0,0,.05)');
+    g.fillStyle = gd; g.fillRect(i * O, j * O, O, O);  // loang màu nhẹ trong viên
+    const nh = 95 + rnd() * 25 | 0;                    // độ nhám từng viên
+    gr.fillStyle = `rgb(${nh},${nh},${nh})`;
+    gr.fillRect(i * O + 3, j * O + 3, O - 6, O - 6);
   }
-  g.strokeStyle = '#8f8c84'; g.lineWidth = 6;      // mạch vữa
-  g.strokeRect(0, 0, 256, 256);
-  g.beginPath(); g.moveTo(128, 0); g.lineTo(128, 256);
-  g.moveTo(0, 128); g.lineTo(256, 128); g.stroke();
+  g.strokeStyle = '#8a857b'; g.lineWidth = 4;            // mạch vữa
+  gr.strokeStyle = '#e6e6e6'; gr.lineWidth = 6;
+  for (const k of [g, gr]) {
+    k.beginPath();
+    for (const t of [0, O, N]) { k.moveTo(t, 0); k.lineTo(t, N); k.moveTo(0, t); k.lineTo(N, t); }
+    k.stroke();
+  }
   const t = new THREE.CanvasTexture(c);
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
   t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = renderer.capabilities.getMaxAnisotropy();
   TEX_GACH = t;
+  TEX_GACH_NHAM = new THREE.CanvasTexture(r);
+  TEX_GACH_NHAM.wrapS = TEX_GACH_NHAM.wrapT = THREE.RepeatWrapping;
   return t;
 }
 
@@ -6365,7 +6431,9 @@ function vlDiBo(bat) {
     batBong(wkTuong); batBong(customGroup); batBong(massGroup); batBong(wkThang);
     _vlCu.dat = denTroi.groundColor.getHex();
     denTroi.groundColor.setHex(0xbfbcb4);        // mặt hướng xuống cũng sáng như tường
-    denTrongNha.intensity = .55;                  // ánh sáng đều trong phòng
+    denTrongNha.intensity = .2;                   // ánh sáng đều trong phòng (phần còn lại do ảnh môi trường)
+    _vlCu.troi = denTroi.intensity; denTroi.intensity = .9;
+    _vlCu.phoi = renderer.toneMappingExposure; renderer.toneMappingExposure = .82;
     _vlCu.nen = scene.background ? scene.background.getHex() : 0x0e1116;
     _vlCu.fog = scene.fog ? scene.fog.color.getHex() : _vlCu.nen;
     scene.background = new THREE.Color(0x9c9890);   // nen trong nha, khong phai nen den
@@ -6373,6 +6441,10 @@ function vlDiBo(bat) {
     const tx = texGach();
     tx.repeat.set(1.6 * state.explode, 1.6 * state.explode);
     matSlab.map = tx; matSlab.color.setHex(0xffffff);
+    _vlCu.slab.r = matSlab.roughness; _vlCu.slab.rm = matSlab.roughnessMap;
+    TEX_GACH_NHAM.repeat.copy(tx.repeat);
+    matSlab.roughnessMap = TEX_GACH_NHAM; matSlab.roughness = 1;   // mặt viên bóng mờ, mạch nhám
+    scene.environment = moiTruongTrong(); scene.environmentIntensity = .4;
     matSlab.transparent = false; matSlab.opacity = 1; matSlab.needsUpdate = true;
     matWallShared.transparent = false; matWallShared.opacity = 1;
     // Thanh trượt "độ mờ tường" có thể đang để 0 -> tường tự vẽ bị ẩn hẳn.
@@ -6389,6 +6461,8 @@ function vlDiBo(bat) {
     });
   } else if (_vlCu.luu) {
     matSlab.map = _vlCu.slab.m; matSlab.color.setHex(_vlCu.slab.c);
+    if (_vlCu.slab.r !== undefined) { matSlab.roughness = _vlCu.slab.r; matSlab.roughnessMap = _vlCu.slab.rm || null; }
+    scene.environment = null;
     matSlab.transparent = _vlCu.slab.t; matSlab.opacity = _vlCu.slab.o; matSlab.needsUpdate = true;
     if (_vlCu.slab.v !== undefined) matSlab.visible = _vlCu.slab.v;
     if (_vlCu.tuong.v !== undefined) matWallShared.visible = _vlCu.tuong.v;
@@ -6403,6 +6477,7 @@ function vlDiBo(bat) {
     dir.castShadow = false;
     if (_vlCu.tiLe) { renderer.setPixelRatio(_vlCu.tiLe); _vlCu.tiLe = 0; }
     if (_vlCu.dat !== undefined) { denTroi.groundColor.setHex(_vlCu.dat); denTrongNha.intensity = 0; }
+    if (_vlCu.troi !== undefined) { denTroi.intensity = _vlCu.troi; renderer.toneMappingExposure = _vlCu.phoi; }
     if (_vlCu.nen !== undefined) {                 // tra lai nen canh cu
       scene.background = new THREE.Color(_vlCu.nen);
       if (scene.fog) scene.fog.color.setHex(_vlCu.fog);
@@ -7451,7 +7526,7 @@ window.IALY = {
   dat(x, z, yaw, pitch) { wk.x = x; wk.z = z; wk.yaw = yaw || 0; wk.pitch = pitch || 0;
     wk.yawN = wk.yaw; wk.pitchN = wk.pitch; wk.vx = wk.vz = 0; return [wk.x, wk.z]; },
   // chup khung 3D dang hien (dataURL PNG)
-  anh() { if (wk.on) buocDiBo(0.016); renderer.render(scene, camera);
+  anh() { if (wk.on) buocDiBo(0.016); veKhung();
     return renderer.domElement.toDataURL('image/jpeg', .8); },
   // lan can / tuong / binh cua cao trinh dang di bo (toa do the gioi)
   vat(loai) { const f = wk.f; return customOf(f.page).filter(o => !loai || o.type === loai)
