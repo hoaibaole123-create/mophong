@@ -263,6 +263,7 @@
 
       <div class="sec">
         <h2>Hiển thị</h2>
+        <div style="display:none">
         <label class="lbl">Giãn cách tầng (×<span id="expv">1.0</span>)</label>
         <input type="range" id="explode" min="1" max="6" step="0.1" value="1.6">
         <label class="lbl">Kích thước ký hiệu (×<span id="mkv">1.0</span>)</label>
@@ -273,16 +274,17 @@
         <input type="range" id="wallop" min="0" max="1" step="0.05" value="0.55">
         <label style="display:block;margin-top:8px">Cỡ biển EXIT <span id="exitScaleVal" class="sub">2.4×</span></label>
         <input type="range" id="exitScale" min="1" max="6" step="0.2" value="2.4">
+        </div>
         <div class="btns" style="margin-top:10px">
-          <button id="massing" class="pri">Tường / sàn</button>
-          <button id="exitBtn" class="pri">Đèn EXIT</button>
-          <button id="cab" class="pri">Tủ, thiết bị</button>
+          <button id="massing" style="display:none" class="pri">Tường / sàn</button>
+          <button id="exitBtn" style="display:none" class="pri">Đèn EXIT</button>
+          <button id="cab" style="display:none" class="pri">Tủ, thiết bị</button>
           <button id="plan2d">Bản vẽ mặt bằng (đang tắt)</button>
-          <button id="paper">Nền giấy trắng</button>
-          <button id="frame" class="pri">Khung bao khối (tab Thiết kế)</button>
-          <button id="walk">🚶 Đi bộ trong cao trình (thoát nạn)</button>
-          <button id="reset" class="pri">Góc nhìn mặc định</button>
-          <button id="csv">Xuất CSV</button>
+          <button id="paper" style="display:none">Nền giấy trắng</button>
+          <button id="frame" style="display:none" class="pri">Khung bao khối (tab Thiết kế)</button>
+          <button id="walk">🚶 Góc nhìn thứ nhất</button>
+          <button id="reset" style="display:none" class="pri">Góc nhìn mặc định</button>
+          <button id="csv" style="display:none">Xuất CSV</button>
         </div>
       </div>
 
