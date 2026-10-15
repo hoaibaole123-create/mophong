@@ -2221,6 +2221,7 @@ function rebuildCustom() {
     const ySan = floorY(f);
     const storey = Math.max(1.2, floorHeight(f) * state.explode - MASS.slab);
     for (const o of customOf(f.page)) {
+      if (laTuongDauThang(o)) continue;
       // Trong chế độ đi bộ, lỗ thông tầng chỉ là chỗ hụt sàn: không vẽ gờ bao,
       // không dựng gì quanh nó.
       if (o.type === 'lo' && typeof wk !== 'undefined' && wk.on) continue;
@@ -5672,6 +5673,11 @@ const wk = { on: false, f: null, x: 0, z: 0, yaw: 0, pitch: 0,
 // dò "nét mực" trên ảnh chỉ bắt được vài ô.
 // Cao trình đã được người dùng vẽ tường riêng thì bản vẽ đó là nguồn duy nhất:
 // không lấy thêm nét mực của ảnh mặt bằng gốc (những nét đã xoá sẽ mọc lại).
+// Tường đầu thang tự sinh (mã 'kt…'): chắn ngang chiếu tới của tháp thang, làm
+// lối vào buồng thang hẹp lại như cửa bị thu nhỏ. Tháp thang nay đã có chiếu
+// tới ngang sàn ở đúng đầu cửa nên bỏ hẳn các bức này.
+const laTuongDauThang = o => o && o.type === 'wall' && /^kt/.test(String(o.id || ''));
+
 function coBanVeRieng(f) {
   let n = 0;
   for (const o of customOf(f.page))
@@ -5707,8 +5713,8 @@ function tuyenTuong(f) {
   // BẢN VẼ CỦA NGƯỜI DÙNG LÀ CHÍNH: cao trình nào đã có tường tự vẽ thì chỉ lấy
   // tường đó + tường bóc từ bản vẽ CHƯA bị xoá. Tuyến vector của PDF chỉ dùng
   // cho cao trình còn trắng, nếu không những nét đã xoá sẽ mọc lại ở chế độ đi bộ.
-  const tuVe = customOf(f.page).filter(o => o.type === 'wall' || o.type === 'box' ||
-                                            o.type === 'tra');
+  const tuVe = customOf(f.page).filter(o => (o.type === 'wall' && !laTuongDauThang(o)) ||
+                                            o.type === 'box' || o.type === 'tra');
   if (tuVe.length >= 3) {
     const ra = [];
     const them = (a, b, day, khoi) => {
