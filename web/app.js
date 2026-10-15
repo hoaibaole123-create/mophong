@@ -101,17 +101,37 @@ function boKetHop() {
   ketHop = new EffectComposer(renderer);
   ketHop.addPass(new RenderPass(scene, camera));
   passAO = new GTAOPass(scene, camera, w, h);
-  passAO.updateGtaoMaterial({ radius: 1.2, distanceExponent: 1.2, thickness: 2, scale: 1.4, samples: 12 });
-  passAO.updatePdMaterial({ radius: 6, rings: 2, samples: 12 });
+  passAO.updateGtaoMaterial({ radius: 1.2, distanceExponent: 1.2, thickness: 2, scale: 1.4, samples: 8 });
+  passAO.updatePdMaterial({ radius: 6, rings: 2, samples: 8 });
   passAO.blendIntensity = 1;
   ketHop.addPass(passAO);
   ketHop.addPass(new OutputPass());
   ketHop.setSize(w, h);
   return ketHop;
 }
+// TỰ HẠ CHẤT LƯỢNG khi máy chạy không kịp (góc nhìn thứ nhất bị giật):
+// đo thời gian khung hình trung bình, chậm hơn ~40 hình/giây thì lần lượt
+//   bậc 1: tắt bóng tối góc (GTAO — tốn nhất)
+//   bậc 2: hạ độ nét về 1×
+//   bậc 3: tắt bóng đổ
+// Mỗi lần vào đi bộ đo lại từ đầu.
+const CL = { bac: 0, ema: 0, dem: 0 };
+function datLaiChatLuong() { CL.bac = 0; CL.ema = 0; CL.dem = 0; state.aoDiBo = true; }
+function chinhChatLuong(dt) {
+  if (dt <= 0 || dt > .2) return;                     // bỏ khung lúc tab ẩn / đang tải
+  CL.ema = CL.ema ? CL.ema * .93 + dt * .07 : dt;
+  if (++CL.dem < 60 || CL.bac >= 3) return;           // đo đủ ~1 s rồi mới xét
+  if (CL.ema < 1 / 40) return;
+  CL.bac++; CL.dem = 0; CL.ema = 0;
+  if (CL.bac === 1) state.aoDiBo = false;
+  else if (CL.bac === 2) { renderer.setPixelRatio(1); resize(); }
+  else if (CL.bac === 3) { renderer.shadowMap.enabled = false; dir.castShadow = false; }
+}
+
 function veKhung() {
   if (wk.on && state.aoDiBo !== false) {
     const k = boKetHop();
+    if (k._pixelRatio !== renderer.getPixelRatio()) k.setPixelRatio(renderer.getPixelRatio());
     k.passes[0].camera = camera; passAO.camera = camera;
     k.render();
   } else renderer.render(scene, camera);
@@ -5641,6 +5661,7 @@ fetch(duongDL('plant.json?v=') + Date.now()).then(r => r.json()).then(d => {
     const nay = performance.now();
     const dt = Math.min(.05, (nay - (loop.truoc || nay)) / 1000); loop.truoc = nay;
     if (typeof buocDiBo === 'function') buocDiBo(dt);
+    if (wk.on) chinhChatLuong(dt);
     if (!wk.on) controls.update();
     // nhịp nền 2 lần/giây để ảnh nạp xong là hiện ngay
     if (nay - (loop.nen || 0) > 500) { loop.nen = nay; canVe = true; }
@@ -6454,9 +6475,10 @@ function vlDiBo(bat) {
     // máy văn phòng vẫn tải được; khung nhìn tổng thể (cả toà nhà) thì tắt.
     renderer.shadowMap.enabled = true;
     dir.castShadow = true;
+    datLaiChatLuong();
     // đi bộ chỉ vẽ một cao trình -> vẽ nét hơn cho nét mảnh (khuôn cửa) không chập chờn
     _vlCu.tiLe = renderer.getPixelRatio();
-    renderer.setPixelRatio(Math.min(2, Math.max(_vlCu.tiLe, devicePixelRatio * 1.5)));
+    renderer.setPixelRatio(Math.min(1.5, Math.max(_vlCu.tiLe, devicePixelRatio * 1.25)));
     const batBong = (g) => g && g.traverse(o => {
       if (!o.isMesh) return;
       o.castShadow = true; o.receiveShadow = true;
@@ -7640,6 +7662,8 @@ window.IALY = {
     wk.camTu = true; const y0 = floorY(wk.f); camPersp.position.set(x, y0 + y, z); camPersp.lookAt(tx, y0 + ty, tz); return 1; },
   anTuong(an) { wkTuong.visible = !an; customGroup.traverse(o => { if (o.userData && o.userData.obj && o.userData.obj.type === 'wall') o.visible = !an; }); return an; },
   ra() { return wk._ra; },
+  thuChatLuong(n, dt) { for (let i = 0; i < n; i++) chinhChatLuong(dt); return this.chatLuong(); },
+  chatLuong() { return { bac: CL.bac, ema: +(CL.ema * 1000).toFixed(1), ao: state.aoDiBo !== false, tiLe: renderer.getPixelRatio(), bong: renderer.shadowMap.enabled }; },
   // diem dung truoc cua vao moi buong thang (phia chieu toi ngang san), nhin vao thang
   cuaThang() { const f = wk.f, kq = [];
     for (const o of customOf(f.page)) { if (o.type !== 'thangbo') continue;
