@@ -2241,7 +2241,7 @@ function rebuildCustom() {
     const ySan = floorY(f);
     const storey = Math.max(1.2, floorHeight(f) * state.explode - MASS.slab);
     for (const o of customOf(f.page)) {
-      if (laTuongDauThang(o)) continue;
+      if (laTuongDauThang(o, f)) continue;
       // Trong chế độ đi bộ, lỗ thông tầng chỉ là chỗ hụt sàn: không vẽ gờ bao,
       // không dựng gì quanh nó.
       if (o.type === 'lo' && typeof wk !== 'undefined' && wk.on) continue;
@@ -5697,7 +5697,24 @@ const wk = { on: false, f: null, x: 0, z: 0, yaw: 0, pitch: 0,
 // Tường đầu thang tự sinh (mã 'kt…'): chắn ngang chiếu tới của tháp thang, làm
 // lối vào buồng thang hẹp lại như cửa bị thu nhỏ. Tháp thang nay đã có chiếu
 // tới ngang sàn ở đúng đầu cửa nên bỏ hẳn các bức này.
-const laTuongDauThang = o => o && o.type === 'wall' && /^kt/.test(String(o.id || ''));
+// Chỉ bỏ bức ở ĐẦU CỬA VÀO (chỗ chiếu tới ngang sàn); bức ở đầu kia buồng thang
+// vẫn giữ để buồng thang kín.
+function laTuongDauThang(o, f) {
+  if (!o || o.type !== 'wall' || !/^kt/.test(String(o.id || '')) || !f) return false;
+  const p = worldXZ(f, (o.u0 + o.u1) / 2, (o.v0 + o.v1) / 2);
+  let tot = null;
+  for (const t of customOf(f.page)) {
+    if (t.type !== 'thangbo') continue;
+    const a = worldXZ(f, t.u0, t.v0), b = worldXZ(f, t.u1, t.v1);
+    const cx = (a[0] + b[0]) / 2, cz = (a[1] + b[1]) / 2, d = Math.hypot(p[0] - cx, p[1] - cz);
+    if (!tot || d < tot.d) tot = { d: d, a: a, b: b, cx: cx, cz: cz };
+  }
+  if (!tot || tot.d > 8) return false;
+  const L = Math.hypot(tot.b[0] - tot.a[0], tot.b[1] - tot.a[1]) || 1;
+  const tw = (p[0] - tot.cx) * (tot.b[0] - tot.a[0]) / L + (p[1] - tot.cz) * (tot.b[1] - tot.a[1]) / L;
+  const ben = benCuaThang(f, tot.a, tot.b);      // -1: cửa ở đầu b
+  return (tw > 0) === (ben < 0);
+}
 
 function coBanVeRieng(f) {
   let n = 0;
@@ -5734,7 +5751,7 @@ function tuyenTuong(f) {
   // BẢN VẼ CỦA NGƯỜI DÙNG LÀ CHÍNH: cao trình nào đã có tường tự vẽ thì chỉ lấy
   // tường đó + tường bóc từ bản vẽ CHƯA bị xoá. Tuyến vector của PDF chỉ dùng
   // cho cao trình còn trắng, nếu không những nét đã xoá sẽ mọc lại ở chế độ đi bộ.
-  const tuVe = customOf(f.page).filter(o => (o.type === 'wall' && !laTuongDauThang(o)) ||
+  const tuVe = customOf(f.page).filter(o => (o.type === 'wall' && !laTuongDauThang(o, f)) ||
                                             o.type === 'box' || o.type === 'tra');
   if (tuVe.length >= 3) {
     const ra = [];
@@ -6617,6 +6634,7 @@ function vachCuaTang(f, gioiHan) {
   // lớp vách đặc: chỗ nào có tường là chắn được. Bỏ tủ thiết bị / máy biến áp —
   // đường chéo của khối không phải tường, dựng lên thành tấm vách cao tới trần.
   const nguonVach = tuyenTuong(f).filter(w => !w.khoi);
+  const tuongTuVe = coBanVeRieng(f);
   const boLanCan = !coBanVeRieng(f);     // chỉ trừ lan can khi tường là nét bóc tự động
   // Ô CỬA TÍNH ĐÚNG NHƯ BẢN VẼ: chiếu bộ cửa lên tim bức tường gần nhất rồi
   // khoét đúng bề rộng cửa. Cách cũ so theo khung chữ nhật của cửa nên cửa vẽ
@@ -6694,7 +6712,10 @@ function vachCuaTang(f, gioiHan) {
                     (duocDuc && wk.luoi && wk.luoi.moThem || []).some(q =>
                       Math.abs(x - q[0]) < .45 && Math.abs(z - q[1]) < .45);
       // Chỗ THẬT SỰ không có tường: ngoài phạm vi, hoặc lỗ thông sàn.
-      const trong0 = (gioiHan && !gioiHan(x, z)) || lo.some(r => trongDaGiac(r.pts, x, z));
+      // Tường do bạn vẽ thì luôn dựng, kể cả nằm trên mép lỗ sàn (lỗ thang tự tính
+      // hay rộng lấn qua tường -> mất cả mảng tường cạnh buồng thang).
+      const trong0 = (gioiHan && !gioiHan(x, z)) ||
+        (!tuongTuVe && lo.some(r => trongDaGiac(r.pts, x, z)));
       // Lan can: CHỈ dùng để loại nét lan can khi nguồn là nét bóc tự động. Nếu
       // cao trình đã có bản vẽ riêng thì bức tường là do bạn vẽ — có lan can chạy
       // cạnh cũng không được xoá tường đi (buồng thang hay bị mất hẳn một bức
