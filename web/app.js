@@ -103,10 +103,17 @@ const NHA_MAY = {
         mo: 'Nhà máy thuỷ điện Ialy — sơ đồ thoát nạn & phương tiện PCCC&CNCH',
         ngaySD: '' }
 };
+// Tạm ẨN Nhà máy Ialy: chỉ dùng Ialy mở rộng. Muốn hiện lại thì đặt true.
+const HIEN_NHA_MAY_IALY = false;
 const nhaMayDang = (() => {
+  if (!HIEN_NHA_MAY_IALY) return 'mr';
   try { return localStorage.getItem('ialy.nhamay') === 'nm' ? 'nm' : 'mr'; }
   catch (e) { return 'mr'; }
 })();
+if (!HIEN_NHA_MAY_IALY) {
+  const tb = document.getElementById('tabsNhaMay');
+  if (tb) tb.style.display = 'none';
+}
 const NM = NHA_MAY[nhaMayDang];
 const duongDL = t => NM.duong + t;              // ./data/… hoac ./data/ialy/…
 const khoaKho = t => NM.kho + '.' + t;          // ialy.custom hoac ialy.nm.custom
