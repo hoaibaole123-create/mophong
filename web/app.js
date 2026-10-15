@@ -2250,6 +2250,12 @@ function rebuildCustom() {
         mesh.position.set(ax, y + (o.h || 1.4), az);
         mesh.rotation.y = (o.rot || 0);
         xoayNutBao(mesh, f, ax, az);            // áp lưng vào tường gần nhất
+      } else if (o.type === 'hong' && HONG_NGOAI.has(o.id)) {
+        // hong ngoai troi: dung tu do tai dung cho ve, khong ap tuong
+        mesh = makeHongNgoai(state.sel === 'c:' + o.id);
+        mesh.position.set(ax, y, az);
+        mesh.rotation.y = (o.rot || 0);
+        if (state.sel === 'c:' + o.id) mesh.scale.setScalar(1.25);
       } else if (o.type === 'hong') {
         mesh = makeHydrant(state.sel === 'c:' + o.id);
         const t = tuongGanNhat(f, ax, az);
@@ -3255,6 +3261,59 @@ const MAT_HONG = {
   dong: new THREE.MeshStandardMaterial({ color: 0xc0903f, roughness: .35, metalness: .8 }),
   chu: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: .6 }),
 };
+// ---- HONG CHUA CHAY NGOAI TROI hai cua (van goc chu Y): mat bich duoi, than chu Y
+// do, hai van goc co tay quay vang, hai khop noi nhanh nhom co nap den.
+// Dung tu do tren ong dung, khong ap tuong. Dung cho cac ma trong HONG_NGOAI.
+const HONG_NGOAI = new Set(['HONG31', 'HONG36', 'HONG40']);
+const MAT_TRU = {
+  do: new THREE.MeshStandardMaterial({ color: 0xd8261c, roughness: .4, metalness: .25 }),
+  vang: new THREE.MeshStandardMaterial({ color: 0xf2c418, roughness: .45, metalness: .2 }),
+  nhom: new THREE.MeshStandardMaterial({ color: 0xc9ccd0, roughness: .3, metalness: .85 }),
+  den: new THREE.MeshStandardMaterial({ color: 0x222222, roughness: .6 }),
+  ong: new THREE.MeshStandardMaterial({ color: 0x8e9399, roughness: .5, metalness: .6 }),
+};
+function makeHongNgoai(chon) {
+  const g = new THREE.Group();
+  const vl = k => chon ? MAT_SEL : MAT_TRU[k];
+  const tru = (r, h, m, n = 24) => new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, n), vl(m));
+  const ong = tru(.06, .55, 'ong'); ong.position.y = .275; g.add(ong);          // ong dung tu san
+  const bich = tru(.15, .035, 'do', 32); bich.position.y = .57; g.add(bich);    // mat bich
+  for (let i = 0; i < 8; i++) {                                                // bu long bich
+    const a = i / 8 * Math.PI * 2, b = tru(.012, .05, 'nhom', 8);
+    b.position.set(Math.cos(a) * .125, .58, Math.sin(a) * .125); g.add(b);
+  }
+  const co = tru(.075, .12, 'do'); co.position.y = .65; g.add(co);              // co chu Y
+  const yNoi = new THREE.Mesh(new THREE.SphereGeometry(.095, 24, 16), vl('do'));
+  yNoi.position.y = .72; g.add(yNoi);
+  for (const s of [-1, 1]) {
+    const nh = new THREE.Group();                                               // mot nhanh
+    nh.position.set(0, .72, 0); nh.rotation.z = -s * .72; g.add(nh);
+    const than = tru(.065, .26, 'do'); than.position.y = .13; nh.add(than);
+    const vongNoi = tru(.085, .03, 'do'); vongNoi.position.y = .2; nh.add(vongNoi);
+    const bau = new THREE.Mesh(new THREE.SphereGeometry(.11, 24, 16), vl('do')); // bau van
+    bau.position.y = .34; nh.add(bau);
+    const nap = tru(.07, .1, 'do'); nap.position.y = .46; nh.add(nap);         // nap van
+    const ty = tru(.015, .14, 'nhom', 10); ty.position.y = .56; nh.add(ty);    // ty van
+    const vo = new THREE.Mesh(new THREE.TorusGeometry(.085, .013, 8, 24), vl('vang'));
+    vo.rotation.x = Math.PI / 2; vo.position.y = .63; nh.add(vo);             // tay quay
+    for (let i = 0; i < 4; i++) {
+      const nan = new THREE.Mesh(new THREE.BoxGeometry(.17, .014, .014), vl('vang'));
+      nan.rotation.y = i * Math.PI / 4; nan.position.y = .63; nh.add(nan);
+    }
+    // cua ra nam ngang huong ra ngoai, gan bau van
+    const ra = new THREE.Group(); ra.position.y = .34; ra.rotation.z = s * .72; nh.add(ra);
+    const co2 = tru(.06, .1, 'do'); co2.rotation.z = Math.PI / 2; co2.position.x = s * .14; ra.add(co2);
+    const khop = tru(.075, .08, 'nhom'); khop.rotation.z = Math.PI / 2; khop.position.x = s * .22; ra.add(khop);
+    for (const k of [-1, 1]) {                                                   // tai khop
+      const tai = new THREE.Mesh(new THREE.BoxGeometry(.03, .04, .03), vl('nhom'));
+      tai.position.set(s * .22, k * .085, 0); ra.add(tai);
+    }
+    const napDen = tru(.068, .03, 'den'); napDen.rotation.z = Math.PI / 2; napDen.position.x = s * .275; ra.add(napDen);
+  }
+  g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  return g;
+}
+
 function makeHydrant(chon) {
   const g = new THREE.Group();
   const vl = k => chon ? MAT_SEL : MAT_HONG[k];
