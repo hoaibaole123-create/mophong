@@ -85,7 +85,7 @@ MANUAL_UNITS = {
 TYPES = {
     "ABC": dict(code="ABC8", label="Bình bột ABC 8kg (MFZL-8)", color="#e23b2e"),
     "CO2_5": dict(code="CO25", label="Bình CO₂ 5kg (MT-5)", color="#2f74d0"),
-    "CO2_24": dict(code="CO224", label="Bình CO₂ 24kg xe đẩy (MT-24)", color="#1f9d6b"),
+    "CO2_24": dict(code="CO224", label="Bình CO₂ 24kg xe đẩy (MT-24)", color="#d42a1f"),
     # He chua chay bang khi FM-200 (khong bóc tu ban ve, them theo danh sach
     # ten cua don vi) — xem themFM200().
     "FM200": dict(code="FM200", label="Bình khí FM-200", color="#c2231b"),

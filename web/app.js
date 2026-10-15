@@ -2547,7 +2547,7 @@ function saveCustom() {
 let selHighlight = null;
 const MAT_BINH_THEM = new THREE.MeshStandardMaterial({ color: 0xe23b2e, roughness: .45, emissive: 0x3a0a06 });
 // binh CO2 24kg xe day: mau xanh nhu ben ban ve goc, cho de phan biet
-const MAT_BINH_CO224 = new THREE.MeshStandardMaterial({ color: 0x1f9d6b, roughness: .45, emissive: 0x08251a });
+const MAT_BINH_CO224 = new THREE.MeshStandardMaterial({ color: 0xd42a1f, roughness: .45, emissive: 0x3a0a06 });   // bình CO2 xe đẩy cũng sơn đỏ
 const MAT_HL = new THREE.MeshBasicMaterial({ color: 0xffc14d, transparent: true, opacity: .55,
   depthTest: false });
 
