@@ -5514,13 +5514,14 @@ function tuyenTuong(f) {
                                             o.type === 'tra');
   if (tuVe.length >= 3) {
     const ra = [];
-    const them = (a, b, day) => {
+    const them = (a, b, day, khoi) => {
       const L = Math.hypot(b[0] - a[0], b[1] - a[1]);
       if (L < .3) return;
-      ra.push({ x0: a[0], z0: a[1], x1: b[0], z1: b[1], day: Math.max(.1, day), L: L });
+      ra.push({ x0: a[0], z0: a[1], x1: b[0], z1: b[1], day: Math.max(.1, day), L: L, khoi: !!khoi });
     };
     for (const o of tuVe) {
-      them(worldXZ(f, o.u0, o.v0), worldXZ(f, o.u1, o.v1), o.t || .22);
+      // tủ / máy biến áp: chỉ để đếm "đã có bản vẽ", KHÔNG phải tường (khoi = true)
+      them(worldXZ(f, o.u0, o.v0), worldXZ(f, o.u1, o.v1), o.t || .22, o.type !== 'wall');
     }
     const ed = editsOf(f.page);
     (f.walls || []).forEach((r, i) => {
@@ -6351,7 +6352,9 @@ function vachCuaTang(f, gioiHan) {
   // đúng: ô cửa khoét đúng chỗ, lanh tô đầy đủ). Vách dựng lại chỉ dùng cho cao
   // trình chưa vẽ gì, và cho cao trình DƯỚI khi bịt buồng thang (gioiHan).
   // Tường của bản vẽ đã được ép hiện + đặc khi vào đi bộ nên không nhìn xuyên.
-  const nguonVach = tuyenTuong(f);   // lớp vách đặc: chỗ nào có tường là chắn được
+  // lớp vách đặc: chỗ nào có tường là chắn được. Bỏ tủ thiết bị / máy biến áp —
+  // đường chéo của khối không phải tường, dựng lên thành tấm vách cao tới trần.
+  const nguonVach = tuyenTuong(f).filter(w => !w.khoi);
   const boLanCan = !coBanVeRieng(f);     // chỉ trừ lan can khi tường là nét bóc tự động
   // Ô CỬA TÍNH ĐÚNG NHƯ BẢN VẼ: chiếu bộ cửa lên tim bức tường gần nhất rồi
   // khoét đúng bề rộng cửa. Cách cũ so theo khung chữ nhật của cửa nên cửa vẽ
