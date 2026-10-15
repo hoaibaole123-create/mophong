@@ -6522,7 +6522,10 @@ function vachCuaTang(f, gioiHan) {
               Math.max(a[0], b[0]) + NOI, Math.max(a[1], b[1]) + NOI]);
   });
   // lối vừa mở để nối mảnh cô lập: đục luôn trên vách cho khớp chỗ đi được
-  if (wk.on && wk.f === f && wk.luoi && wk.luoi.moThem)
+  // Cao trình đã có tường tự vẽ: tường của bạn là chuẩn, KHÔNG đục lỗ trên vách
+  // (lối nối chỉ mở trong lưới đi lại). Đục ra thì thành ô trống giữa tường.
+  const duocDuc = !coBanVeRieng(f);
+  if (duocDuc && wk.on && wk.f === f && wk.luoi && wk.luoi.moThem)
     for (const p of wk.luoi.moThem)
       cua.push([p[0] - .45, p[1] - .45, p[0] + .45, p[1] + .45]);
   const y = floorY(f);
@@ -6633,7 +6636,7 @@ function vachCuaTang(f, gioiHan) {
       // đó cắt trúng chỗ khác, để lại lỗ hổng ngay CẠNH khuôn cửa.
       const kCua = khoet.find(k => t >= k[0] && t <= k[1]);
       const laCua = !!kCua ||
-                    (wk.luoi && wk.luoi.moThem || []).some(q =>
+                    (duocDuc && wk.luoi && wk.luoi.moThem || []).some(q =>
                       Math.abs(x - q[0]) < .45 && Math.abs(z - q[1]) < .45);
       // Chỗ THẬT SỰ không có tường: ngoài phạm vi, hoặc lỗ thông sàn.
       const trong0 = (gioiHan && !gioiHan(x, z)) || lo.some(r => trongDaGiac(r.pts, x, z));
@@ -7549,6 +7552,8 @@ window.IALY = {
     wk.camTu = true; const y0 = floorY(wk.f); camPersp.position.set(x, y0 + y, z); camPersp.lookAt(tx, y0 + ty, tz); return 1; },
   anTuong(an) { wkTuong.visible = !an; customGroup.traverse(o => { if (o.userData && o.userData.obj && o.userData.obj.type === 'wall') o.visible = !an; }); return an; },
   ra() { return wk._ra; },
+  // cac lo noi manh san tu mo o cao trinh dang di bo (toa do ban ve)
+  loMo() { const f = wk.f, k = 1 / mpp(); return ((wk.luoi && wk.luoi.moThem) || []).map(p => [+(p[0] * k).toFixed(0), +(p[1] * k).toFixed(0)]); },
   buongThang() { const f = wk.f, kq = [];
     for (const o of customOf(f.page)) { if (o.type !== 'thangbo' && o.type !== 'stair') continue;
       const a = worldXZ(f, o.u0, o.v0), b = worldXZ(f, o.u1, o.v1), cx = (a[0] + b[0]) / 2, cz = (a[1] + b[1]) / 2;
