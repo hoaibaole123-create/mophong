@@ -7087,7 +7087,10 @@ addEventListener('keydown', function (e) {
       if (d < xa) { xa = d; gan = o; }
     }
     wk.leo = null; wk.khoaThang = true; wk.yMat = undefined;
+    // nhớ chiếc thang vừa leo (toạ độ thế giới) để lên tới nơi đứng ĐÚNG đầu trên của nó
+    wk.thangVuaLeo = gan ? { o: gan, a: worldXZ(wk.f, gan.u0, gan.v0), b: worldXZ(wk.f, gan.u1, gan.v1) } : null;
     leoThang(gan ? gan.name : '');
+    wk.thangVuaLeo = null;
     return;
   }
   wk.phim[e.key.toLowerCase()] = true;
@@ -7199,7 +7202,7 @@ function choThoang(L, x0, z0, toiThieu) {
 // cầu thang, nhìn ra sàn — không đứng kẹt giữa lan can, mặt dí vào tay vịn.
 // Đổi tầng xong thì ĐỨNG NGAY CỬA BUỒNG THANG, phía ngoài, mặt quay vào cao
 // trình — như vừa bước từ cầu thang ra. Cửa = cửa gần ô thang nhất.
-function raCuaThang(f, tam) {
+function raCuaThang(f, tam, nuaDai, dauThang) {
   const ed = editsOf(f.page);
   const ds = customOf(f.page).filter(o => o.type === 'door')
     .map(o => [worldXZ(f, o.u0, o.v0), worldXZ(f, o.u1, o.v1)])
@@ -7210,8 +7213,8 @@ function raCuaThang(f, tam) {
     const L = Math.hypot(q[0] - p[0], q[1] - p[1]);
     if (L < .4) continue;
     const gx = (p[0] + q[0]) / 2, gz = (p[1] + q[1]) / 2;
-    const d = Math.hypot(gx - tam[0], gz - tam[1]);
-    if (d > 9) continue;
+    const d = dauThang ? Math.hypot(gx - dauThang[0], gz - dauThang[1]) : Math.hypot(gx - tam[0], gz - tam[1]);
+    if (d > (dauThang ? 2.5 : (nuaDai || 2) + 3)) continue;   // cửa phải sát đầu chiếu tới, không lấy cửa phòng bên cạnh
     let nx = -(q[1] - p[1]) / L, nz = (q[0] - p[0]) / L;      // pháp tuyến ô cửa
     if ((gx - tam[0]) * nx + (gz - tam[1]) * nz < 0) { nx = -nx; nz = -nz; }   // quay ra ngoài buồng thang
     ung.push({ d: d, gx: gx, gz: gz, nx: nx, nz: nz });
@@ -7244,22 +7247,56 @@ function raCuaThang(f, tam) {
 }
 
 function raKhoiThang(f) {
-  let tam = null, xa = 1e9;
+  const datRa = (x, z, yaw, loai) => {
+    wk.x = x; wk.z = z; wk.yaw = wk.yawN = yaw; wk.pitch = wk.pitchN = 0;
+    wk.vx = wk.vz = 0; wk.yMat = undefined;
+    wk._ra = { cua: true, loai: loai, x: x, z: z };
+  };
+  const ok = (x, z) => !wk.luoi || wk.luoi.trong(x, z);
+  const vua = wk.thangVuaLeo;
+  // VỪA LEO MỘT THANG THẲNG (một vế, không phải tháp thang): đứng ngay đầu trên của
+  // chính nó, mặt nhìn theo hướng vừa leo.
+  if (vua && vua.o.type === 'stair') {
+    const L = Math.hypot(vua.b[0] - vua.a[0], vua.b[1] - vua.a[1]) || 1;
+    const ux = (vua.b[0] - vua.a[0]) / L, uz = (vua.b[1] - vua.a[1]) / L;
+    for (const k of [.8, 1.2, 1.7, 2.3, .4]) {
+      const x = vua.b[0] + ux * k, z = vua.b[1] + uz * k;
+      if (!ok(x, z)) continue;
+      datRa(x, z, Math.atan2(-ux, -uz), 'dau thang thang');
+      return;
+    }
+  }
+  let tam = null, xa = 1e9, tO = null, tA = null, tB = null;
+  // tâm dò: chiếc thang vừa leo (nếu có), không thì chỗ đang đứng
+  const gx = vua ? (vua.a[0] + vua.b[0]) / 2 : wk.x, gz = vua ? (vua.a[1] + vua.b[1]) / 2 : wk.z;
   for (const o of customOf(f.page)) {
     if (o.type !== 'thangbo' && o.type !== 'stair') continue;
     const a = worldXZ(f, o.u0, o.v0), b = worldXZ(f, o.u1, o.v1);
-    const c = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], d = Math.hypot(c[0] - wk.x, c[1] - wk.z);
-    if (d < xa) { xa = d; tam = c; }
+    const c = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], d = Math.hypot(c[0] - gx, c[1] - gz);
+    if (d < xa) { xa = d; tam = c; tO = o; tA = a; tB = b; }
   }
   if (!tam) return;
-  const cua = raCuaThang(f, tam);
-  if (cua) {
-    wk.x = cua.x; wk.z = cua.z; wk.yaw = wk.yawN = cua.yaw; wk.pitch = wk.pitchN = 0;
-    wk.vx = wk.vz = 0; wk.yMat = undefined;
-    wk._ra = { cua: true, x: cua.x, z: cua.z };
-    return;
+  const L = Math.hypot(tB[0] - tA[0], tB[1] - tA[1]) || 1;
+  const ve = tO.type === 'thangbo' ? daiVeThang(f, tO) : L;
+  let dauThang = null;
+  if (tO.type === 'thangbo') {
+    const sg0 = benCuaThang(f, tA, tB) < 0 ? 1 : -1;
+    dauThang = [tam[0] + (tB[0] - tA[0]) / L * sg0 * (ve / 2 + .8), tam[1] + (tB[1] - tA[1]) / L * sg0 * (ve / 2 + .8)];
   }
-  const ok = (x, z) => !wk.luoi || wk.luoi.trong(x, z);
+  const cua = raCuaThang(f, tam, ve / 2, dauThang);
+  if (cua) { datRa(cua.x, cua.z, cua.yaw, 'cua'); return; }
+  // CẦU THANG HỞ (không có cửa buồng thang): đứng ngay ĐẦU CẦU THANG, trên chiếu
+  // tới ngang sàn, mặt quay ra khỏi thang — như vừa bước lên tới nơi.
+  if (tO.type === 'thangbo') {
+    const ux = (tB[0] - tA[0]) / L, uz = (tB[1] - tA[1]) / L;
+    const sg = benCuaThang(f, tA, tB) < 0 ? 1 : -1;       // đầu có chiếu tới ngang sàn
+    for (const k of [ve / 2 + .9, ve / 2 + 1.4, ve / 2 + 2, ve / 2 + .5]) {
+      const x = tam[0] + ux * sg * k, z = tam[1] + uz * sg * k;
+      if (!ok(x, z)) continue;
+      datRa(x, z, Math.atan2(-ux * sg, -uz * sg), 'dau thang');
+      return;
+    }
+  }
   const yMat = floorY(f) + CAO_MAT * state.explode;
   // Đo bằng TIA vào tường/cửa đang hiện, xét cả MẶT TRONG: tia gặp mặt quay
   // cùng chiều với tia nghĩa là điểm đứng đang nằm lọt trong khối tường.
