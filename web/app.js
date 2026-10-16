@@ -7789,22 +7789,77 @@ function buocDiBo(dt) {
 const NGUOI = new THREE.Group();
 NGUOI.visible = false;
 scene.add(NGUOI);
+// Người công nhân vận hành ~1,72 m: khối bo tròn (capsule/lathe) thay cho hộp,
+// có khớp vai - khuỷu - hông - gối để bước đi đung đưa tự nhiên. Mặt hướng -z.
 {
-  const vl = (c, r) => new THREE.MeshStandardMaterial({ color: c, roughness: r || .7 });
-  const ao = vl(0xe8772e, .8), quan = vl(0xd96a24, .8), phan = vl(0xf2f2f2, .5), da = vl(0xe0b48f, .6),
-        giay = vl(0x2b2b2b, .6), mu = vl(0xf5f5f0, .35);
-  const hop = (w, h, d, m, x, y, z) => { const o = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); o.position.set(x, y, z); NGUOI.add(o); return o; };
-  const tru = (r, h, m, x, y, z) => { const o = new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, 12), m); o.position.set(x, y, z); NGUOI.add(o); return o; };
-  NGUOI.userData.chan = [hop(.14, .8, .16, quan, -.1, .48, 0), hop(.14, .8, .16, quan, .1, .48, 0)];
-  hop(.15, .08, .26, giay, -.1, .04, -.04); hop(.15, .08, .26, giay, .1, .04, -.04);
-  hop(.42, .62, .24, ao, 0, 1.18, 0);                        // thân áo bảo hộ
-  hop(.43, .05, .25, phan, 0, 1.02, 0); hop(.43, .05, .25, phan, 0, 1.3, 0);   // dải phản quang
-  NGUOI.userData.tay = [hop(.11, .6, .13, ao, -.27, 1.15, 0), hop(.11, .6, .13, ao, .27, 1.15, 0)];
-  tru(.05, .08, da, 0, 1.53, 0);
-  const dau = new THREE.Mesh(new THREE.SphereGeometry(.11, 16, 12), da); dau.position.set(0, 1.64, 0); NGUOI.add(dau);
-  const mu1 = new THREE.Mesh(new THREE.SphereGeometry(.13, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), mu);
-  mu1.position.set(0, 1.68, 0); NGUOI.add(mu1);
-  const vanh = new THREE.Mesh(new THREE.CylinderGeometry(.16, .16, .015, 20), mu); vanh.position.set(0, 1.68, -.02); NGUOI.add(vanh);
+  const vl = (c, r, m) => new THREE.MeshStandardMaterial({ color: c, roughness: r ?? .7, metalness: m || 0 });
+  const M = {
+    ao: vl(0xe56f1f, .75), aoTam: vl(0xc95f17, .8), quan: vl(0x2f3c52, .85),
+    phan: vl(0xe9ecef, .25, .4), da: vl(0xd9a77f, .6), giay: vl(0x1e1e20, .55),
+    mu: vl(0xf4f4ef, .3), quai: vl(0x333333, .6), toc: vl(0x2a211b, .9), gang: vl(0xf0c419, .7)
+  };
+  const mesh = (g, m, x, y, z, cha) => { const o = new THREE.Mesh(g, m); o.position.set(x, y, z); (cha || NGUOI).add(o); return o; };
+  const cap = (r, l) => new THREE.CapsuleGeometry(r, l, 6, 14);
+  const khop = (x, y, z, cha) => { const g = new THREE.Group(); g.position.set(x, y, z); (cha || NGUOI).add(g); return g; };
+
+  // --- chân: hông -> đùi -> gối -> cẳng chân -> giày
+  const chan = [], goi = [];
+  for (const s of [-1, 1]) {
+    const hong = khop(s * .095, .93, 0);
+    mesh(cap(.075, .34), M.quan, 0, -.22, 0, hong);                 // đùi
+    const g = khop(0, -.45, 0, hong);
+    mesh(cap(.062, .34), M.quan, 0, -.21, 0, g);                     // cẳng chân
+    const giay = mesh(new THREE.BoxGeometry(.12, .09, .27, 1, 1, 1), M.giay, 0, -.43, -.045, g);
+    giay.geometry.translate(0, 0, 0);
+    mesh(new THREE.SphereGeometry(.062, 12, 8), M.giay, 0, -.42, -.15, g).scale.set(1, .75, 1);  // mũi giày bo
+    chan.push(hong); goi.push(g);
+  }
+  // --- hông + thân: áo bảo hộ dạng lathe (vai rộng, eo thon)
+  mesh(cap(.15, .12), M.quan, 0, .96, 0).scale.set(1.15, .7, .85);  // hông
+  const prof = [[.0, 0], [.17, 0], [.175, .12], [.18, .28], [.205, .42], [.215, .5], [.19, .56], [.08, .6], [0, .6]]
+    .map(p => new THREE.Vector2(p[0], p[1]));
+  const than = mesh(new THREE.LatheGeometry(prof, 24), M.ao, 0, .98, 0);
+  than.scale.set(1.08, 1, .68);
+  // dải phản quang ngang ngực và ngang bụng + hai dải dọc vai
+  for (const [y, r] of [[1.13, .181], [1.33, .209]]) {
+    const d = mesh(new THREE.CylinderGeometry(r, r, .045, 24, 1, true), M.phan, 0, y, 0);
+    d.scale.set(1.09, 1, .69);
+  }
+  for (const s of [-1, 1]) {
+    const dd = mesh(new THREE.BoxGeometry(.045, .5, .012), M.phan, s * .09, 1.3, -.148);
+    dd.rotation.x = -.08;
+    const ds = mesh(new THREE.BoxGeometry(.045, .5, .012), M.phan, s * .09, 1.3, .148);
+    ds.rotation.x = .08;
+  }
+  mesh(new THREE.BoxGeometry(.012, .42, .01), M.aoTam, 0, 1.25, -.152);   // khoá kéo áo
+  // --- cổ + đầu + tóc + mũ bảo hộ có vành và quai
+  mesh(new THREE.CylinderGeometry(.05, .058, .09, 12), M.da, 0, 1.6, 0);
+  const dau = mesh(new THREE.SphereGeometry(.098, 20, 16), M.da, 0, 1.71, -.005);
+  dau.scale.set(.92, 1.08, 1);
+  mesh(new THREE.SphereGeometry(.1, 20, 12, 0, Math.PI * 2, 0, Math.PI * .55), M.toc, 0, 1.72, .012).scale.set(.95, 1, 1);
+  for (const s of [-1, 1]) mesh(new THREE.SphereGeometry(.022, 8, 6), M.da, s * .092, 1.7, .005).scale.set(.5, 1, .8);  // tai
+  const mu = mesh(new THREE.SphereGeometry(.122, 24, 14, 0, Math.PI * 2, 0, Math.PI / 2), M.mu, 0, 1.755, 0);
+  mu.scale.set(1, .92, 1.1);
+  mesh(new THREE.BoxGeometry(.03, .02, .25), M.mu, 0, 1.87, 0);                                   // gờ nóc mũ
+  const vanh = mesh(new THREE.CylinderGeometry(.15, .155, .012, 28), M.mu, 0, 1.755, -.025);
+  vanh.scale.set(.95, 1, 1.12);
+  const quai = mesh(new THREE.TorusGeometry(.092, .006, 6, 24, Math.PI), M.quai, 0, 1.73, 0);
+  quai.rotation.set(0, Math.PI / 2, Math.PI);
+  // --- tay: vai -> cánh tay -> khuỷu -> cẳng tay -> găng
+  const tay = [], khuyu = [];
+  for (const s of [-1, 1]) {
+    const vai = khop(s * .225, 1.5, 0);
+    mesh(new THREE.SphereGeometry(.07, 14, 10), M.ao, 0, 0, 0, vai);                // vai tròn
+    vai.rotation.z = s * .08;
+    mesh(cap(.056, .22), M.ao, 0, -.15, 0, vai);                                     // cánh tay
+    const k = khop(0, -.3, 0, vai);
+    mesh(cap(.048, .2), M.ao, 0, -.13, 0, k);                                       // cẳng tay
+    mesh(new THREE.CylinderGeometry(.05, .05, .03, 12), M.phan, 0, -.06, 0, k);     // viền phản quang tay
+    const g = mesh(new THREE.SphereGeometry(.05, 12, 10), M.gang, 0, -.29, -.01, k); // bàn tay đeo găng
+    g.scale.set(.85, 1.25, .7);
+    tay.push(vai); khuyu.push(k);
+  }
+  NGUOI.userData = { chan, goi, tay, khuyu };
   NGUOI.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
 }
 const _tiaN = new THREE.Raycaster();
@@ -7818,9 +7873,15 @@ function datNgoiThu3(pha) {
   NGUOI.position.set(wk.x, y0, wk.z);
   NGUOI.rotation.y = wk.yawN;
   // vung tay chân khi bước
-  const vung = Math.sin(pha || 0) * .45 * (wk.nhunBd || 0);
-  NGUOI.userData.chan[0].rotation.x = vung; NGUOI.userData.chan[1].rotation.x = -vung;
-  NGUOI.userData.tay[0].rotation.x = -vung; NGUOI.userData.tay[1].rotation.x = vung;
+  const bd = wk.nhunBd || 0, ph = pha || 0;
+  const U = NGUOI.userData;
+  for (let i = 0; i < 2; i++) {
+    const sg = i ? -1 : 1, v = Math.sin(ph) * sg;
+    U.chan[i].rotation.x = v * .42 * bd;                          // đùi đưa trước/sau
+    U.goi[i].rotation.x = Math.max(0, -Math.cos(ph) * sg) * .55 * bd + .02;   // gối gập khi chân nhấc
+    U.tay[i].rotation.x = -v * .38 * bd;                           // tay đánh ngược chân
+    U.khuyu[i].rotation.x = -(.18 + Math.max(0, v) * .3 * bd);    // khuỷu hơi gập
+  }
   // camera: sau lưng 3,2 m, cao hơn đầu, nghiêng theo pitch
   const dau = new THREE.Vector3(wk.x, y0 + 1.6 * k, wk.z);
   const cp = Math.cos(wk.pitchN), sp = Math.sin(wk.pitchN);
