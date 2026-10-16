@@ -7005,7 +7005,7 @@ function vaoDiBo() {
     const r = renderer.domElement.requestPointerLock();
     if (r && r.catch) r.catch(() => {});
   }
-  hint('Đi bộ: W/A/S/D hoặc mũi tên · Shift chạy · Z (PageUp) LÊN tầng trên · X (PageDown) XUỐNG tầng dưới · Esc thoát');
+  hint('Đi bộ: W/A/S/D hoặc mũi tên · Shift chạy · Z (PageUp) LÊN tầng trên · X (PageDown) XUỐNG tầng dưới · V góc nhìn thứ ba · Esc thoát');
 }
 
 // Đổi cao trình trong lúc ĐANG đi bộ: phải dựng lại vách, lưới đi lại, thang và
@@ -7048,6 +7048,8 @@ function raDiBo() {
   rebuildCustom();                  // trả lại gờ lỗ thông tầng
   rebuildMasses();                  // trả lại sàn nguyên vẹn
   const btn = document.querySelector('#walk'); if (btn) btn.classList.remove('on');
+  const b3 = document.querySelector('#walk3'); if (b3) b3.classList.remove('on');
+  wk.ngoi3 = false; NGUOI.visible = false;
   if (document.exitPointerLock) document.exitPointerLock();
   hint('');
 }
@@ -7062,6 +7064,7 @@ addEventListener('keydown', function (e) {
   // Không phải đi tới chân thang và không leo từng bậc: bấm là sang tầng luôn,
   // đứng ở đầu cầu thang gần nhất (cầu thang vẫn hiện để nhìn thấy).
   const k = e.key.toLowerCase();
+  if (k === 'v') { e.preventDefault(); batNgoiThu3(!wk.ngoi3); return; }
   if (k === 'x' || k === 'pagedown') {
     e.preventDefault();
     const ds = thangXuong(wk.f);
@@ -7609,6 +7612,63 @@ function buocDiBo(dt) {
                         wk.z - sx2 * nhunX);
   camPersp.rotation.order = 'YXZ';
   camPersp.rotation.set(wk.pitchN, wk.yawN, Math.sin(pha) * 0.004 * wk.nhunBd);
+  datNgoiThu3(pha);
+}
+
+// ---- GÓC NHÌN THỨ BA: thấy người công nhân đang đi, camera đứng sau lưng, cao
+// hơn đầu một chút. Tường che giữa camera và người thì kéo camera lại gần.
+const NGUOI = new THREE.Group();
+NGUOI.visible = false;
+scene.add(NGUOI);
+{
+  const vl = (c, r) => new THREE.MeshStandardMaterial({ color: c, roughness: r || .7 });
+  const ao = vl(0xe8772e, .8), quan = vl(0xd96a24, .8), phan = vl(0xf2f2f2, .5), da = vl(0xe0b48f, .6),
+        giay = vl(0x2b2b2b, .6), mu = vl(0xf5f5f0, .35);
+  const hop = (w, h, d, m, x, y, z) => { const o = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); o.position.set(x, y, z); NGUOI.add(o); return o; };
+  const tru = (r, h, m, x, y, z) => { const o = new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, 12), m); o.position.set(x, y, z); NGUOI.add(o); return o; };
+  NGUOI.userData.chan = [hop(.14, .8, .16, quan, -.1, .48, 0), hop(.14, .8, .16, quan, .1, .48, 0)];
+  hop(.15, .08, .26, giay, -.1, .04, -.04); hop(.15, .08, .26, giay, .1, .04, -.04);
+  hop(.42, .62, .24, ao, 0, 1.18, 0);                        // thân áo bảo hộ
+  hop(.43, .05, .25, phan, 0, 1.02, 0); hop(.43, .05, .25, phan, 0, 1.3, 0);   // dải phản quang
+  NGUOI.userData.tay = [hop(.11, .6, .13, ao, -.27, 1.15, 0), hop(.11, .6, .13, ao, .27, 1.15, 0)];
+  tru(.05, .08, da, 0, 1.53, 0);
+  const dau = new THREE.Mesh(new THREE.SphereGeometry(.11, 16, 12), da); dau.position.set(0, 1.64, 0); NGUOI.add(dau);
+  const mu1 = new THREE.Mesh(new THREE.SphereGeometry(.13, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), mu);
+  mu1.position.set(0, 1.68, 0); NGUOI.add(mu1);
+  const vanh = new THREE.Mesh(new THREE.CylinderGeometry(.16, .16, .015, 20), mu); vanh.position.set(0, 1.68, -.02); NGUOI.add(vanh);
+  NGUOI.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+}
+const _tiaN = new THREE.Raycaster();
+function datNgoiThu3(pha) {
+  const bat = !!(wk.on && wk.ngoi3);
+  NGUOI.visible = bat;
+  if (!bat) return;
+  const k = state.explode;
+  const y0 = floorY(wk.f);
+  NGUOI.scale.setScalar(k);
+  NGUOI.position.set(wk.x, y0, wk.z);
+  NGUOI.rotation.y = wk.yawN;
+  // vung tay chân khi bước
+  const vung = Math.sin(pha || 0) * .45 * (wk.nhunBd || 0);
+  NGUOI.userData.chan[0].rotation.x = vung; NGUOI.userData.chan[1].rotation.x = -vung;
+  NGUOI.userData.tay[0].rotation.x = -vung; NGUOI.userData.tay[1].rotation.x = vung;
+  // camera: sau lưng 3,2 m, cao hơn đầu, nghiêng theo pitch
+  const dau = new THREE.Vector3(wk.x, y0 + 1.6 * k, wk.z);
+  const cp = Math.cos(wk.pitchN), sp = Math.sin(wk.pitchN);
+  const lui = new THREE.Vector3(Math.sin(wk.yawN) * cp, -sp + .35, Math.cos(wk.yawN) * cp).normalize();
+  let d = 3.2 * Math.max(1, k * .8);
+  _tiaN.set(dau, lui); _tiaN.far = d;
+  const vat = [wkTuong, customGroup, massGroup].filter(Boolean);
+  const hit = _tiaN.intersectObjects(vat, true).find(h => h.object.visible !== false);
+  if (hit) d = Math.max(.6, hit.distance - .3);
+  camPersp.position.copy(dau).addScaledVector(lui, d);
+  camPersp.lookAt(dau.x, dau.y - .1 * k, dau.z);
+}
+function batNgoiThu3(bat) {
+  wk.ngoi3 = bat;
+  const b = document.querySelector('#walk3'); if (b) b.classList.toggle('on', !!(bat && wk.on));
+  hint(bat ? 'Góc nhìn thứ ba — V để về góc nhìn thứ nhất' : 'Góc nhìn thứ nhất — V để sang góc nhìn thứ ba');
+  setTimeout(() => hint(''), 2200);
 }
 
 
@@ -8320,5 +8380,14 @@ const btnKhit = document.querySelector('#dKhit');
 if (btnKhit) btnKhit.onclick = () => lamKhitGoc(activeFloorObj());
 
 const btnWalk = document.querySelector('#walk');
-if (btnWalk) btnWalk.onclick = function () { if (wk.on) raDiBo(); else vaoDiBo(); };
+if (btnWalk) btnWalk.onclick = function () {
+  if (wk.on && wk.ngoi3) { batNgoiThu3(false); return; }
+  if (wk.on) raDiBo(); else { wk.ngoi3 = false; vaoDiBo(); }
+};
+const btnWalk3 = document.querySelector('#walk3');
+if (btnWalk3) btnWalk3.onclick = function () {
+  if (wk.on && wk.ngoi3) { raDiBo(); return; }
+  if (!wk.on) vaoDiBo();
+  batNgoiThu3(true);
+};
 
