@@ -1,7 +1,9 @@
 // Doc BANG THEO DOI TINH TRANG PCCC hang thang (file Excel tren Google Drive cua
 // don vi) va tra ve ket qua kiem tra tung binh, de the theo doi trong phan mem
 // tu cap nhat ma khong phai nap tay.
-//   GET /api/kiemtra -> { "9": { "BỘT-▼348-153IMR-PX1": {ngay, kq, nguoi}, ... }, ... }
+//   GET /api/kiemtra -> { "2026": { "9": { "BỘT-▼348-153IMR-PX1": {ngay, kq, nguoi, thay?}, ... } }, ... }
+//   (theo NAM roi theo THANG: nhieu file nhieu nam khong de len nhau; thay=true khi
+//   cot danh gia ghi co thay binh moi)
 // Nguon: bien moi truong NGUON_KIEM_TRA (cac ID file Drive, cach nhau dau phay)
 // hoac danh sach mac dinh duoi day. File phai de "Bat ky ai co duong lien ket".
 const XLSX = require('xlsx');
@@ -43,10 +45,11 @@ async function docFile(id) {
       // kiem tra that, bo qua cho toi khi dien ngay dung thang
       const mt = ngay.match(/^\d{2}\/(\d{2})\//);
       if (mt && String(+mt[1]) !== thang) continue;
-      (ra[thang] = ra[thang] || {})[chuan(tb)] = {
-        ngay: ngay, kq: ketQua(row[5]), nguoi: (String(row[6] || '').trim() || nguoiTruoc),
-      };
-      nguoiTruoc = ra[thang][chuan(tb)].nguoi;
+      const nam = (ngay.match(/\/(\d{4})$/) || [])[1] || String(new Date().getFullYear());
+      const o = { ngay: ngay, kq: ketQua(row[5]), nguoi: (String(row[6] || '').trim() || nguoiTruoc) };
+      if (/thay\s*(mới|bình|moi)/i.test(String(row[5] || ''))) o.thay = true;
+      ((ra[nam] = ra[nam] || {})[thang] = ra[nam][thang] || {})[chuan(tb)] = o;
+      nguoiTruoc = o.nguoi;
     }
   }
   return ra;
@@ -58,7 +61,7 @@ module.exports = async (req, res) => {
   for (const id of ids) {
     try {
       const d = await docFile(id);
-      for (const t in d) Object.assign(gop[t] = gop[t] || {}, d[t]);
+      for (const n in d) for (const t in d[n]) Object.assign(((gop[n] = gop[n] || {})[t] = gop[n][t] || {}), d[n][t]);
     } catch (e) { loi.push(id + ': ' + e.message); }
   }
   res.setHeader('Cache-Control', 's-maxage=600, stale-while-revalidate=3600');

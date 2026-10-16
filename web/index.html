@@ -84,6 +84,25 @@
   .tpccc td:nth-child(3) input{font-size:11px}
   .tpccc input:focus{background:#fff3c4}
   .tpccc .ghi{margin-top:9px;font-size:11px;color:#5a6068;text-align:right}
+  /* chon nam cua the, dau thay binh, lich su thay */
+  .tpccc .namThe{display:flex;align-items:center;gap:6px;justify-content:center;margin:6px 0 2px;font-size:13px}
+  .tpccc .namThe button{border:1px solid #9aa0a8;background:#fff;border-radius:4px;padding:0 7px;cursor:pointer;color:#12161c}
+  .tpccc .namThe button:disabled{opacity:.35;cursor:default}
+  .tpccc .namThe span{font-size:11px;color:#5a6068;margin-left:6px}
+  .tpccc .namThe a{color:#0b5cad;cursor:pointer;text-decoration:underline}
+  .tpccc .thayMoi{margin:6px 0;padding:4px 6px;background:#e7f4e8;border:1px solid #6aa86f;color:#1d5a23;
+    font-size:12px;font-weight:700;text-align:center;border-radius:4px}
+  .tpccc tr.thayHang td{background:#e7f4e8}
+  .tpccc .thayKhung{margin-top:10px}
+  .tpccc .thayNut,.tpccc .thayLuu,.tpccc .thayHuy{border:1px solid #6aa86f;background:#fff;color:#1d5a23;
+    border-radius:4px;padding:3px 9px;cursor:pointer;font:inherit;font-size:12px}
+  .tpccc .thayForm{margin-top:6px;padding:6px;border:1px dashed #9aa0a8;font-size:12px}
+  .tpccc .thayForm label{display:block;margin-bottom:4px}
+  .tpccc .thayForm input{border-bottom:1px solid #9aa0a8;text-align:left;width:60%;margin-left:4px}
+  .tpccc table.ls{font-size:11px;text-align:left;margin-top:4px}
+  .tpccc table.ls td{height:auto}
+  .tpccc tr.moThe{cursor:pointer}
+  .tpccc tr.moThe:hover td{background:#fff3c4}
   #info .k{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.05em}
   #info .v{margin-bottom:7px}
   #info .close{position:absolute;right:8px;top:6px;cursor:pointer;color:var(--muted)}
@@ -284,6 +303,7 @@
           <button id="frame" style="display:none" class="pri">Khung bao khối (tab Thiết kế)</button>
           <button id="walk">🚶 Góc nhìn thứ nhất</button>
           <button id="walk3">🧍 Góc nhìn thứ ba</button>
+          <button id="dsThay">🔄 Bình đã thay mới</button>
           <button id="reset" style="display:none" class="pri">Góc nhìn mặc định</button>
           <button id="csv" style="display:none">Xuất CSV</button>
         </div>
@@ -308,7 +328,7 @@
 <script type="importmap">
 { "imports": { "three": "./vendor/three.module.js" } }
 </script>
-<script type="module" src="./app.js?v=1792132006"></script>
+<script type="module" src="./app.js?v=1792133145"></script>
 <div id="wkHud" style="display:none;position:fixed;left:50%;bottom:26px;transform:translateX(-50%);
      background:rgba(16,21,28,.88);border:1px solid #2b3540;border-radius:10px;padding:10px 16px;
      color:#e6edf3;font:13px/1.5 system-ui;z-index:50;text-align:center;min-width:280px"></div>

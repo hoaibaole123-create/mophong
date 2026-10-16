@@ -5284,60 +5284,192 @@ function kyMaHieu(loai, f, ma, veGoc) {
   return vt + '-▼' + el + ' -' + so;
 }
 
+// Ket qua tu bang Excel (API) theo NAM -> THANG. Ban cu cua API tra thang o tang
+// tren cung (khong co nam) -> coi la nam hien tai.
+function kqApiNam(nam) {
+  const ks = Object.keys(KQ_API || {});
+  if (ks.length && ks.every(k => /^\d{1,2}$/.test(k))) return nam === new Date().getFullYear() ? KQ_API : {};
+  return (KQ_API && KQ_API[String(nam)]) || {};
+}
+// Du lieu the theo NAM. The cu chi co d.hang (mot nam) -> chuyen vao d.nam[nam].
+function theNam(d, nam) {
+  d.nam = d.nam || {};
+  if (d.hang && d.hang.some(Boolean)) {
+    const ys = d.hang.map(r => r && r.ngay && +(r.ngay.match(/(\d{4})$/) || [])[1]).filter(Boolean);
+    const y = ys.length ? ys[0] : new Date().getFullYear();
+    const cu = d.nam[y] = d.nam[y] || { hang: [] };
+    d.hang.forEach((r, i) => { if (r && !cu.hang[i]) cu.hang[i] = r; });
+    d.hang = [];
+  }
+  return d.nam[nam] = d.nam[nam] || { hang: [] };
+}
+const THE_NAM = { nam: new Date().getFullYear() };      // nam dang xem tren the
+const ngayNay = () => { const t = new Date(); return String(t.getDate()).padStart(2, '0') + '/' +
+  String(t.getMonth() + 1).padStart(2, '0') + '/' + t.getFullYear(); };
+const esc = v => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+
+// Cac lan thay binh tu bang Excel (cot danh gia ghi "thay moi")
+function thayTuBang(ky) {
+  const ra = [];
+  for (const n of Object.keys(KQ_API || {})) {
+    if (!/^\d{4}$/.test(n)) continue;
+    for (const t in KQ_API[n]) {
+      const v = KQ_API[n][t] && KQ_API[n][t][chuanTen(ky)];
+      if (v && v.thay) ra.push({ ngay: v.ngay, lyDo: 'Ghi trong bảng kiểm tra tháng ' + t + '/' + n, bang: true });
+    }
+  }
+  return ra;
+}
+
 function veTheKiemTra(khoa, page, tenPT, ky, ghiChu) {
   const kho = theOf(page);
   const d = kho[khoa] || (kho[khoa] = { seri: '', ngaySD: '', hang: [] });
-  const nam = new Date().getFullYear();
+  const namNay = new Date().getFullYear();
+  const nam = THE_NAM.nam;
+  const dn = theNam(d, nam);
+  const soNgay = x => { const m = String(x.ngay || '').match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    return m ? +m[3] * 10000 + +m[2] * 100 + +m[1] : 0; };
+  const lich = (d.lichSu || []).concat(thayTuBang(ky)).sort((x, y) => soNgay(x) - soNgay(y));
+  // nam co du lieu (ghi tay + bang Excel): biet nam nao con the cu
+  const coNam = new Set(Object.keys(d.nam || {}).filter(y => (d.nam[y].hang || []).some(Boolean)).map(Number));
+  for (const n of Object.keys(KQ_API || {})) {
+    if (/^\d{4}$/.test(n) && Object.values(KQ_API[n]).some(t => t && t[chuanTen(ky)])) coNam.add(+n);
+  }
   let h = '<div class="tpccc"><h4>THẺ THEO DÕI KẾT QUẢ KIỂM TRA<br>PHƯƠNG TIỆN PCCC</h4>';
+  h += '<div class="namThe"><button data-nam="-1" title="Năm trước">◀</button><b>Năm ' + nam + '</b>' +
+       '<button data-nam="1" title="Năm sau"' + (nam >= namNay ? ' disabled' : '') + '>▶</button><span>' +
+       [...coNam].sort().map(y => y === nam ? '<u>' + y + '</u>' : '<a data-di="' + y + '">' + y + '</a>').join(' · ') +
+       '</span></div>';
+  if (lich.length) {
+    const cuoi = lich[lich.length - 1];
+    h += '<div class="thayMoi">🔄 ĐÃ THAY BÌNH MỚI ' + esc(cuoi.ngay || '') +
+         (lich.length > 1 ? ' (' + lich.length + ' lần)' : '') + '</div>';
+  }
   h += '<div class="dong">- Tên phương tiện: <b>' + tenPT + '</b></div>';
   h += '<div class="dong">- Ký mã hiệu: <b>' + ky + '</b> Số Seri: ' +
-       '<input data-o="seri" value="' + (d.seri || '') + '" style="text-align:left;width:38%"></div>';
-  // Ca nha may dua vao su dung cung mot ngay -> dien san, ai can thi sua lai.
+       '<input data-o="seri" value="' + esc(d.seri) + '" style="text-align:left;width:38%"></div>';
   const ngay = d.ngaySD || NM.ngaySD || '';
   h += '<div class="dong">- Ngày, tháng, năm đưa vào sử dụng: ' +
-       '<input data-o="ngaySD" value="' + ngay + '" style="text-align:left;width:40%" placeholder="dd/mm/yyyy"></div>';
+       '<input data-o="ngaySD" value="' + esc(ngay) + '" style="text-align:left;width:40%" placeholder="dd/mm/yyyy"></div>';
   h += '<table><tr><th>Ngày, tháng<br>kiểm tra</th><th>Kết quả<br>kiểm tra</th>' +
        '<th>Người, đơn vị<br>kiểm tra</th></tr>';
-  // bang hang thang (tu dong) de len ket qua nap tu phieu PDF cua cung thang
-  const ngoai = Object.assign({}, KQ_PHIEU[khoa] || {});
-  for (const t in KQ_API) {
-    const v = KQ_API[t] && KQ_API[t][chuanTen(ky)];
+  const ngoai = Object.assign({}, nam === namNay ? (KQ_PHIEU[khoa] || {}) : {});
+  const api = kqApiNam(nam);
+  for (const t in api) {
+    const v = api[t] && api[t][chuanTen(ky)];
     if (v) ngoai[t] = v;
   }
   for (let i = 0; i < 12; i++) {
-    // Nguoi dung tu dien thi uu tien; chua dien thi lay theo phieu da nap.
-    const tay = d.hang[i] || {};
-    // tung o rieng: o nao go tay thi lay o do, o de trong thi lay theo bang/phieu
+    // o nao go tay thi lay o do, o de trong thi lay theo bang/phieu
+    const tay = dn.hang[i] || {};
     const tu = ngoai[String(i + 1)] || {};
     const r = { ngay: tay.ngay || tu.ngay || '', kq: tay.kq || tu.kq || '', nguoi: tay.nguoi || tu.nguoi || '' };
     const thang = String(i + 1).padStart(2, '0');
-    // Co ngay kiem tra that thi ghi ngay do; chua co thi de "…..." cho dien tay.
-    // O ngay chi go NGAY, phan thang/nam in san nhu tren the that.
     const ngayCo = (r.ngay || '').split('/')[0];
-    h += '<tr><td class="ng"><input data-h="' + i + '" data-o="ngay" data-thang="' +
-         thang + '" class="ngayO" value="' + ngayCo + '" placeholder="…...">' +
+    h += '<tr' + (tu.thay ? ' class="thayHang" title="Thay bình mới"' : '') + '><td class="ng"><input data-h="' + i +
+         '" data-o="ngay" data-thang="' + thang + '" class="ngayO" value="' + esc(ngayCo) + '" placeholder="…...">' +
          '<span>/' + thang + '/' + nam + '</span></td>' +
-         '<td><input data-h="' + i + '" data-o="kq" value="' + (r.kq || '') + '"></td>' +
-         '<td><input data-h="' + i + '" data-o="nguoi" value="' + (r.nguoi || '') + '"></td></tr>';
+         '<td><input data-h="' + i + '" data-o="kq" value="' + esc(r.kq) + '"></td>' +
+         '<td><input data-h="' + i + '" data-o="nguoi" value="' + esc(r.nguoi) + '"></td></tr>';
   }
   h += '</table>';
+  // ---- thay binh moi + lich su thay
+  h += '<div class="thayKhung"><button class="thayNut">🔄 Thay bình mới</button>' +
+       '<div class="thayForm" style="display:none">' +
+       '<label>Số seri bình mới <input data-t="seri"></label>' +
+       '<label>Ngày thay <input data-t="ngay" value="' + ngayNay() + '" placeholder="dd/mm/yyyy"></label>' +
+       '<label>Lý do <input data-t="lyDo" placeholder="hết hạn, mất áp, hư hỏng…"></label>' +
+       '<button class="thayLuu">Lưu</button> <button class="thayHuy">Huỷ</button></div>';
+  if (lich.length) {
+    h += '<div class="ghi"><b>Lịch sử thay bình</b><table class="ls"><tr><th>Ngày thay</th><th>Seri cũ → mới</th><th>Lý do</th></tr>' +
+         lich.map(x => '<tr><td>' + esc(x.ngay) + '</td><td>' +
+           (x.bang ? '—' : esc(x.seriCu || '?') + ' → ' + esc(x.seriMoi || '?')) +
+           '</td><td>' + esc(x.lyDo || '') + '</td></tr>').join('') + '</table></div>';
+  }
+  h += '</div>';
   if (ghiChu) h += '<div class="ghi">' + ghiChu + '</div>';
   h += '</div>';
   $('#infobody').innerHTML = h;
   $('#info').classList.add('the');
   $('#info').style.display = 'block';
-  $('#infobody').querySelectorAll('input').forEach(inp => {
+  const veLai = () => veTheKiemTra(khoa, page, tenPT, ky, ghiChu);
+  const goc = $('#infobody');
+  goc.querySelectorAll('.namThe button').forEach(b => b.onclick = () => {
+    THE_NAM.nam = Math.min(namNay, THE_NAM.nam + (+b.dataset.nam)); veLai();
+  });
+  goc.querySelectorAll('.namThe a').forEach(a => a.onclick = () => { THE_NAM.nam = +a.dataset.di; veLai(); });
+  const form = goc.querySelector('.thayForm');
+  goc.querySelector('.thayNut').onclick = () => { form.style.display = form.style.display === 'none' ? '' : 'none'; };
+  goc.querySelector('.thayHuy').onclick = () => { form.style.display = 'none'; };
+  goc.querySelector('.thayLuu').onclick = () => {
+    const g = k => form.querySelector('[data-t="' + k + '"]').value.trim();
+    const ngayT = g('ngay') || ngayNay();
+    d.lichSu = d.lichSu || [];
+    d.lichSu.push({ ngay: ngayT, seriCu: d.seri || '', seriMoi: g('seri'),
+                    ngaySDCu: d.ngaySD || NM.ngaySD || '', lyDo: g('lyDo') });
+    d.seri = g('seri'); d.ngaySD = ngayT;              // binh moi dua vao su dung tu ngay thay
+    saveEdits();
+    veLai();
+  };
+  goc.querySelectorAll('input:not([data-t])').forEach(inp => {
     inp.oninput = () => {
       const i = inp.dataset.h, o = inp.dataset.o;
-      // O ngay chi chua NGAY -> ghep lai thanh dd/mm/yyyy truoc khi luu
+      // o ngay chi chua NGAY -> ghep lai thanh dd/mm/yyyy cua NAM DANG XEM
       const v = inp.dataset.thang
-        ? (inp.value.trim() ? inp.value.trim().padStart(2, '0') + '/' +
-           inp.dataset.thang + '/' + nam : '')
+        ? (inp.value.trim() ? inp.value.trim().padStart(2, '0') + '/' + inp.dataset.thang + '/' + nam : '')
         : inp.value;
       if (i === undefined) d[o] = v;
-      else { d.hang[i] = d.hang[i] || {}; d.hang[i][o] = v; }
+      else { dn.hang[i] = dn.hang[i] || {}; dn.hang[i][o] = v; }
       saveEdits();
     };
+  });
+}
+
+// ---- DANH SACH BINH DA THAY MOI (moi cao trinh): bam vao dong de mo the
+function dsThayMoi() {
+  const ra = [];
+  for (const f of state.data.floors) {
+    const kho = (state.edits[f.page] || {}).the || {};
+    for (const k in kho) {
+      const ls = kho[k].lichSu || [];
+      if (ls.length) ra.push({ khoa: k, f: f, cuoi: ls[ls.length - 1], n: ls.length });
+    }
+  }
+  for (const it of state.data.items) {             // thay ghi trong bang Excel
+    const tb = thayTuBang(it.ma || it.id);
+    if (!tb.length || ra.some(r => r.khoa === 'i:' + it.id)) continue;
+    ra.push({ khoa: 'i:' + it.id, f: floorOf(it.floor), cuoi: tb[tb.length - 1], n: tb.length });
+  }
+  return ra;
+}
+function moDsThayMoi() {
+  const ds = dsThayMoi();
+  const ten = k => {
+    if (k.startsWith('i:')) { const it = state.data.items.find(x => x.id === k.slice(2)); return it ? (it.ma || it.id) : k; }
+    const m = customMeshes.find(x => x.userData.obj && 'c:' + x.userData.obj.id === k);
+    return m ? (m.userData.maSo || m.userData.obj.name) : k;
+  };
+  let h = '<div class="tpccc"><h4>BÌNH ĐÃ THAY MỚI</h4>';
+  if (!ds.length) {
+    h += '<div class="dong">Chưa có bình nào được ghi thay mới. Mở thẻ một bình rồi bấm "🔄 Thay bình mới" để ghi.</div>';
+  } else {
+    h += '<table class="ls"><tr><th>Mã bình</th><th>Cao trình</th><th>Ngày thay</th><th>Lý do</th></tr>' +
+      ds.sort((a, b) => b.f.elevation - a.f.elevation).map(r => '<tr class="moThe" data-k="' + esc(r.khoa) + '"><td>' +
+        esc(ten(r.khoa)) + '</td><td>' + r.f.elevation.toFixed(2) + '</td><td>' + esc(r.cuoi.ngay) +
+        (r.n > 1 ? ' (' + r.n + ' lần)' : '') + '</td><td>' + esc(r.cuoi.lyDo || '') + '</td></tr>').join('') + '</table>';
+  }
+  h += '</div>';
+  $('#infobody').innerHTML = h;
+  $('#info').classList.add('the'); $('#info').style.display = 'block';
+  $('#infobody').querySelectorAll('.moThe').forEach(tr => tr.onclick = () => {
+    const k = tr.dataset.k;
+    if (k.startsWith('i:')) {
+      const it = state.data.items.find(x => x.id === k.slice(2));
+      if (it) { state.selected = it.id; applyVisibility(); showInfo(it); }
+    } else {
+      const m = customMeshes.find(x => x.userData.obj && 'c:' + x.userData.obj.id === k);
+      if (m) showInfoVe(m);
+    }
   });
 }
 
@@ -7780,6 +7912,8 @@ window.IALY = {
     wk.camTu = true; const y0 = floorY(wk.f); camPersp.position.set(x, y0 + y, z); camPersp.lookAt(tx, y0 + ty, tz); return 1; },
   anTuong(an) { wkTuong.visible = !an; customGroup.traverse(o => { if (o.userData && o.userData.obj && o.userData.obj.type === 'wall') o.visible = !an; }); return an; },
   ra() { return wk._ra; },
+  moThe(id) { const it = state.data.items.find(x => x.id === id); if (it) showInfo(it); return !!it; },
+  dsThay() { moDsThayMoi(); return dsThayMoi().length; },
   thuChatLuong(n, dt) { for (let i = 0; i < n; i++) chinhChatLuong(dt); return this.chatLuong(); },
   chatLuong() { return { bac: CL.bac, ema: +(CL.ema * 1000).toFixed(1), ao: state.aoDiBo !== false, tiLe: renderer.getPixelRatio(), bong: renderer.shadowMap.enabled }; },
   // diem dung truoc cua vao moi buong thang (phia chieu toi ngang san), nhin vao thang
@@ -8421,6 +8555,8 @@ if (btnWalk) btnWalk.onclick = function () {
   if (wk.on && wk.ngoi3) { batNgoiThu3(false); return; }
   if (wk.on) raDiBo(); else { wk.ngoi3 = false; vaoDiBo(); }
 };
+const btnDsThay = document.querySelector('#dsThay');
+if (btnDsThay) btnDsThay.onclick = () => moDsThayMoi();
 const btnWalk3 = document.querySelector('#walk3');
 if (btnWalk3) btnWalk3.onclick = function () {
   if (wk.on && wk.ngoi3) { raDiBo(); return; }
