@@ -6032,8 +6032,24 @@ function noiManhVaoChinh(L, f, toiDa) {
   return moRa;
 }
 
-function dungLuoi(f) {
+// Vùng lưới đi bộ: khung toà nhà + mọi TẤM SÀN tự vẽ (sân, nhà phụ ngoài khung
+// chính). Trước chỉ lấy khung toà nhà -> sân và nhà phụ không đi tới được.
+function vungLuoiDiBo(f) {
   const fp = footprintWorld(f);
+  if (!fp) return null;
+  const v = { x0: fp.x0, x1: fp.x1, z0: fp.z0, z1: fp.z1 };
+  for (const o of customOf(f.page)) {
+    if (o.type !== 'san') continue;
+    for (const p of (o.pts || [[o.u0, o.v0], [o.u1, o.v1]])) {
+      const [x, z] = worldXZ(f, p[0], p[1]);
+      v.x0 = Math.min(v.x0, x); v.x1 = Math.max(v.x1, x); v.z0 = Math.min(v.z0, z); v.z1 = Math.max(v.z1, z);
+    }
+  }
+  return v;
+}
+
+function dungLuoi(f) {
+  const fp = vungLuoiDiBo(f);
   if (!fp) return null;
   const nx = Math.ceil((fp.x1 - fp.x0) / O_LUOI), nz = Math.ceil((fp.z1 - fp.z0) / O_LUOI);
   const can = [];
@@ -7973,6 +7989,57 @@ window.IALY = {
     wk.camTu = true; const y0 = floorY(wk.f); camPersp.position.set(x, y0 + y, z); camPersp.lookAt(tx, y0 + ty, tz); return 1; },
   anTuong(an) { wkTuong.visible = !an; customGroup.traverse(o => { if (o.userData && o.userData.obj && o.userData.obj.type === 'wall') o.visible = !an; }); return an; },
   ra() { return wk._ra; },
+  // RA SOAT cao trinh dang di bo: thiet bi khong toi duoc, cua bi chan, thang bi chan
+  raSoat() {
+    const f = wk.f, L = wk.luoi, k = 1 / mpp(), kq = { el: f.elevation, loi: [] };
+    if (!L) return kq;
+    // vung chinh (lon nhat)
+    const nh = new Int32Array(L.nx * L.nz).fill(-1); let lon = -1, coLon = 0, id = 0;
+    for (let c = 0; c < L.o.length; c++) { if (!L.o[c] || nh[c] >= 0) continue;
+      const q = [c]; nh[c] = id;
+      for (let h = 0; h < q.length; h++) { const u = q[h], i = (u / L.nz) | 0, j = u % L.nz;
+        for (const [a, b] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const ni = i + a, nj = j + b;
+          if (ni < 0 || nj < 0 || ni >= L.nx || nj >= L.nz) continue; const n = ni * L.nz + nj;
+          if (L.o[n] && nh[n] < 0) { nh[n] = id; q.push(n); } } }
+      if (q.length > coLon) { coLon = q.length; lon = id; } id++; }
+    // diem (x,z) co o di duoc thuoc vung chinh trong ban kinh r (m) khong
+    const toi = (x, z, r) => { const i0 = L.iOf(x), j0 = L.jOf(z), R = Math.ceil(r / (L.xOf(1) - L.xOf(0)));
+      for (let a = -R; a <= R; a++) for (let b = -R; b <= R; b++) { const i = i0 + a, j = j0 + b;
+        if (i < 0 || j < 0 || i >= L.nx || j >= L.nz) continue; if (nh[i * L.nz + j] === lon) return true; }
+      return false; };
+    const uv = (x, z) => [Math.round(x * k), Math.round(z * k)];
+    const tam = tamSanCuaTang(f);
+    for (const it of state.data.items) { if (it.floor !== f.page) continue;
+      const [bx, by] = viTriBinh(it); const [x, z] = worldXZ(f, bx, by);
+      if (tam.length && !tam.some(p => trongDaGiac(p, x, z))) kq.loi.push(['binh ngoai san', it.ma || it.id, uv(x, z)]);
+      else if (!toi(x, z, 1.5)) kq.loi.push(['binh khong toi duoc (1,5 m)', it.ma || it.id, uv(x, z)]); }
+    for (const o of customOf(f.page)) {
+      const [x, z] = worldXZ(f, (o.u0 + o.u1) / 2, (o.v0 + o.v1) / 2);
+      if (['hong', 'nutbao', 'bin', 'fm200', 'exit'].includes(o.type)) {
+        if (!toi(x, z, 1.8)) kq.loi.push([o.type + ' khong toi duoc', o.name || o.id, uv(x, z)]);
+      } else if (o.type === 'door') {
+        const a = worldXZ(f, o.u0, o.v0), b = worldXZ(f, o.u1, o.v1);
+        const L2 = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1, nx = -(b[1] - a[1]) / L2, nz = (b[0] - a[0]) / L2;
+        const hai = [toi(x + nx * .9, z + nz * .9, .45), toi(x - nx * .9, z - nz * .9, .45)];
+        if (!hai[0] || !hai[1]) kq.loi.push(['cua khong qua duoc (' + (hai[0] ? 'mot ben' : hai[1] ? 'mot ben' : 'ca hai ben') + ')', o.name || o.id, uv(x, z)]);
+      } else if (o.type === 'thangbo' || o.type === 'stair') {
+        const a = worldXZ(f, o.u0, o.v0), b = worldXZ(f, o.u1, o.v1);
+        if (!toi(a[0], a[1], 2.5) && !toi(b[0], b[1], 2.5)) kq.loi.push(['cau thang khong toi duoc', o.name || o.id, uv(x, z)]);
+      } }
+    kq.vungPhu = id - 1; kq.oChinh = coLon;
+    return kq; },
+  vungCoLap() { const L = wk.luoi, k = 1 / mpp(); if (!L) return null;
+    const nh = new Int32Array(L.nx * L.nz).fill(-1), ra = [];
+    for (let c = 0; c < L.o.length; c++) { if (!L.o[c] || nh[c] >= 0) continue;
+      const q = [c]; nh[c] = ra.length; let i0 = 1e9, i1 = -1, j0 = 1e9, j1 = -1;
+      for (let h = 0; h < q.length; h++) { const u = q[h], i = (u / L.nz) | 0, j = u % L.nz;
+        i0 = Math.min(i0, i); i1 = Math.max(i1, i); j0 = Math.min(j0, j); j1 = Math.max(j1, j);
+        for (const [a, b] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const ni = i + a, nj = j + b;
+          if (ni < 0 || nj < 0 || ni >= L.nx || nj >= L.nz) continue; const n = ni * L.nz + nj;
+          if (L.o[n] && nh[n] < 0) { nh[n] = ra.length; q.push(n); } } }
+      ra.push({ o: q.length, u: [+(L.xOf(i0) * k).toFixed(0), +(L.xOf(i1) * k).toFixed(0)], v: [+(L.zOf(j0) * k).toFixed(0), +(L.zOf(j1) * k).toFixed(0)] }); }
+    return ra.sort((a, b) => b.o - a.o).slice(0, 25); },
+  oLuoi(x, z) { return wk.luoi ? (wk.luoi.trong(x, z) ? 1 : 0) : -1; },
   moThe(id) { const it = state.data.items.find(x => x.id === id); if (it) showInfo(it); return !!it; },
   dsThay() { moDsThayMoi(); return dsThayMoi().length; },
   thuChatLuong(n, dt) { for (let i = 0; i < n; i++) chinhChatLuong(dt); return this.chatLuong(); },
