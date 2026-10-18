@@ -5855,10 +5855,26 @@ function coBanVeRieng(f) {
   return n >= 3;
 }
 
+// Nét tường PDF nằm GẦN TRỌN trong một khối tủ / máy biến áp đã vẽ: đó là đường
+// bao tủ trên bản vẽ, không phải tường -> không dựng thành vách cao tới trần.
+function trongKhoiTu(f, r) {
+  const x0 = Math.min(r[0], r[2]), x1 = Math.max(r[0], r[2]), y0 = Math.min(r[1], r[3]), y1 = Math.max(r[1], r[3]);
+  const dt = Math.max(1e-6, (x1 - x0) * (y1 - y0)), mo = 8;          // nới 8 đơn vị (~0,5 m)
+  for (const o of customOf(f.page)) {
+    if (o.type !== 'box' && o.type !== 'tra') continue;
+    const bx0 = Math.min(o.u0, o.u1) - mo, bx1 = Math.max(o.u0, o.u1) + mo;
+    const by0 = Math.min(o.v0, o.v1) - mo, by1 = Math.max(o.v0, o.v1) + mo;
+    const w = Math.max(0, Math.min(x1, bx1) - Math.max(x0, bx0)), h = Math.max(0, Math.min(y1, by1) - Math.max(y0, by0));
+    if (w * h / dt >= .4) return true;
+  }
+  return false;
+}
+
 // Tường bóc từ bản vẽ PDF mà người dùng đã VẼ LAN CAN đè lên: chỗ đó là lan
 // can chứ không phải tường -> coi như đã xoá (không dựng tường, không chặn đường).
 function duoiLanCan(f, r) {
   if (!r) return false;
+  if (trongKhoiTu(f, r)) return true;
   const ngang = (r[2] - r[0]) >= (r[3] - r[1]);
   const a0 = ngang ? r[0] : r[1], a1 = ngang ? r[2] : r[3];
   const g = ngang ? (r[1] + r[3]) / 2 : (r[0] + r[2]) / 2;
@@ -7834,7 +7850,8 @@ scene.add(NGUOI);
   mesh(cap(.15, .12), M.quan, 0, .96, 0).scale.set(1.15, .7, .85);  // hông
   const prof = [[.0, 0], [.17, 0], [.175, .12], [.18, .28], [.205, .42], [.215, .5], [.19, .56], [.08, .6], [0, .6]]
     .map(p => new THREE.Vector2(p[0], p[1]));
-  const than = mesh(new THREE.LatheGeometry(prof, 24), M.ao, 0, .98, 0);
+  const aoHaiMat = M.ao.clone(); aoHaiMat.side = THREE.DoubleSide;   // thân lathe: hai mặt, không thủng vai
+  const than = mesh(new THREE.LatheGeometry(prof, 24), aoHaiMat, 0, .98, 0);
   than.scale.set(1.08, 1, .68);
   // dải phản quang ngang ngực và ngang bụng + hai dải dọc vai
   for (const [y, r] of [[1.13, .181], [1.33, .209]]) {
