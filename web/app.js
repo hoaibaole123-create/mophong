@@ -164,7 +164,7 @@ const NHA_MAY = {
         ngaySD: '' }
 };
 // Tạm ẨN Nhà máy Ialy: chỉ dùng Ialy mở rộng. Muốn hiện lại thì đặt true.
-const HIEN_NHA_MAY_IALY = false;
+const HIEN_NHA_MAY_IALY = true;
 const nhaMayDang = (() => {
   if (!HIEN_NHA_MAY_IALY) return 'mr';
   try { return localStorage.getItem('ialy.nhamay') === 'nm' ? 'nm' : 'mr'; }
