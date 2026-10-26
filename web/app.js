@@ -5473,6 +5473,293 @@ function moDsThayMoi() {
   });
 }
 
+// ---------------------------------------------------------------------------
+// BANG TONG HOP KIEM TRA THEO THANG: moi cao trinh bao nhieu phuong tien da
+// kiem tra / dat / khong dat / chua kiem tra, bieu do 12 thang, xuat Excel va in
+// PDF. Doc cung nguon voi the (o go tay > bang Excel tren Drive > phieu PDF),
+// chi DOC chu khong sua du lieu the.
+const TEN_NHA_MAY = { mr: 'Nhà máy thủy điện Ialy mở rộng', nm: 'Nhà máy thủy điện Ialy' };
+const TH = { nam: new Date().getFullYear(), thang: new Date().getMonth() + 1, mo: null, loc: 'binh' };
+// Bang Excel hang thang chi theo doi BINH (bot, CO2, FM-200); hong nuoc va nut an
+// khong co trong bang -> mac dinh chi tinh binh, tranh luon bao 'chua kiem tra'.
+const LA_BINH = l => !['hong', 'HONG', 'nutbao', 'NUTBAO'].includes(l);
+const TEN_LOC = { binh: 'Bình chữa cháy', tat: 'Tất cả phương tiện' };
+
+// Toan bo phuong tien PCCC cua nha may dang mo (binh boc tu ban ve + vat tu ve).
+function dsPhuongTien(loc) {
+  const ra = [];
+  for (const it of state.data.items) {
+    const f = floorOf(it.floor);
+    if (!f || editsOf(f.page).delItem.indexOf(it.id) >= 0) continue;
+    const lb = loaiBinh(it), t = state.data.types[lb] || {};
+    ra.push({ khoa: 'i:' + it.id, f, loai: lb, ten: TEN_PT[lb] || t.label || lb,
+              ky: kyMaHieu(lb, f, it.ma || it.id, !!it.ma), viTri: it.room || '' });
+  }
+  for (const f of state.data.floors) {
+    const dem = {};                                   // danh so giong ganMaSo()
+    for (const o of (state.custom[f.page] || [])) {
+      if (!['hong', 'nutbao', 'bin', 'fm200'].includes(o.type)) continue;
+      const k = o.type;
+      dem[k] = (dem[k] || 0) + 1;
+      const loai = o.type === 'bin' ? (o.binh || 'ABC8') : o.type;
+      const ma = maCuaVat(o, f, dem[k]) || o.id;
+      ra.push({ khoa: 'c:' + o.id, f, loai, obj: o,
+                ten: o.type === 'bin' ? (TEN_PT[loai] || 'Bình chữa cháy') : (TEN_PT[o.type] || o.name),
+                ky: kyMaHieu(loai, f, ma, !!o.ma), viTri: '' });
+    }
+  }
+  return loc === 'binh' ? ra.filter(p => LA_BINH(p.loai)) : ra;
+}
+
+const KHONG_DAT = /không|khong|hỏng|hư|thất\s*bại|mất\s*áp|ko\b|k\.?\s*đ/i;
+// Ket qua thang `t` (1..12) nam `nam` cua mot phuong tien -> {tt, ngay, kq, nguoi, thay}
+// tt: 'dat' | 'khong' | 'chua' | 'sau' (thang chua toi)
+function kqThang(p, nam, t, api) {
+  const nay = new Date();
+  if (nam > nay.getFullYear() || (nam === nay.getFullYear() && t > nay.getMonth() + 1)) return { tt: 'sau' };
+  const d = ((state.edits[p.f.page] || {}).the || {})[p.khoa] || {};
+  let tay = (((d.nam || {})[nam] || {}).hang || [])[t - 1];
+  if (!tay && d.hang && d.hang[t - 1] && String(d.hang[t - 1].ngay || '').endsWith('/' + nam)) tay = d.hang[t - 1];
+  tay = tay || {};
+  const tu = ((api[String(t)] || {})[chuanTen(p.ky)]) ||
+             (nam === nay.getFullYear() ? (KQ_PHIEU[p.khoa] || {})[String(t)] : null) || {};
+  const r = { ngay: tay.ngay || tu.ngay || '', kq: tay.kq || tu.kq || '', nguoi: tay.nguoi || tu.nguoi || '' };
+  r.thay = !!tu.thay || (d.lichSu || []).some(x => new RegExp('/' + String(t).padStart(2, '0') + '/' + nam + '$').test(x.ngay || ''));
+  r.tt = !r.kq && !r.ngay ? 'chua' : KHONG_DAT.test(r.kq) ? 'khong' : 'dat';
+  return r;
+}
+
+// Tong hop: theo cao trinh cho thang dang chon + tung thang trong nam.
+function tinhTongHop(nam, thang) {
+  const ds = dsPhuongTien(TH.loc), api = kqApiNam(nam);
+  const tang = new Map(), thangs = Array.from({ length: 12 }, () => ({ dat: 0, khong: 0, chua: 0, sau: 0 }));
+  const chiTiet = [];
+  for (const p of ds) {
+    const kqs = [];
+    for (let t = 1; t <= 12; t++) { const r = kqThang(p, nam, t, api); kqs.push(r); thangs[t - 1][r.tt]++; }
+    const r = kqs[thang - 1];
+    let g = tang.get(p.f.page);
+    if (!g) tang.set(p.f.page, g = { f: p.f, tong: 0, dat: 0, khong: 0, chua: 0, sau: 0, thay: 0, ds: [] });
+    g.tong++; g[r.tt]++; if (r.thay) g.thay++;
+    g.ds.push({ p, r });
+    chiTiet.push({ p, r, kqs });
+  }
+  const dsTang = [...tang.values()].sort((a, b) => b.f.elevation - a.f.elevation ||
+    THU_TU_KHU.indexOf(khuNha(a.f)) - THU_TU_KHU.indexOf(khuNha(b.f)));
+  const tong = { tong: ds.length, dat: 0, khong: 0, chua: 0, sau: 0, thay: 0 };
+  for (const g of dsTang) for (const k of ['dat', 'khong', 'chua', 'sau', 'thay']) tong[k] += g[k];
+  return { nam, thang, dsTang, thangs, tong, chiTiet };
+}
+
+const phanTram = (a, b) => (b ? Math.round(a * 100 / b) : 0);
+const TT_CHU = { dat: 'Đạt', khong: 'Không đạt', chua: 'Chưa kiểm tra', sau: '—' };
+
+function veTongHop() {
+  let goc = $('#tongHop');
+  if (!goc) {
+    goc = document.createElement('div');
+    goc.id = 'tongHop';
+    $('#view').appendChild(goc);
+  }
+  const K = tinhTongHop(TH.nam, TH.thang);
+  const nay = new Date(), namNay = nay.getFullYear();
+  const tl = K.tong.dat + K.tong.khong;                  // da kiem tra
+  let h = '<div class="thKhung"><span class="close thDong">✕</span>' +
+    '<h3>📊 Tổng hợp kiểm tra phương tiện PCCC <small>' + esc(TEN_NHA_MAY[nhaMayDang] || '') + '</small></h3>' +
+    '<div class="thChon"><button data-nam="-1">◀</button><b>Năm ' + TH.nam + '</b>' +
+    '<button data-nam="1"' + (TH.nam >= namNay ? ' disabled' : '') + '>▶</button>' +
+    '<span class="thThangs">' + Array.from({ length: 12 }, (_, i) => {
+      const t = i + 1, sau = TH.nam === namNay && t > nay.getMonth() + 1;
+      return '<button data-thang="' + t + '" class="' + (t === TH.thang ? 'on' : '') + '"' + (sau ? ' disabled' : '') + '>T' + t + '</button>';
+    }).join('') + '</span>' +
+    '<span class="thLoc">' + Object.keys(TEN_LOC).map(k => '<button data-loc="' + k + '" class="' + (TH.loc === k ? 'on' : '') + '">' + TEN_LOC[k] + '</button>').join('') + '</span>' +
+    '<span class="thXuat"><button class="thExcel">⬇ Xuất Excel</button><button class="thPdf">🖨 In / PDF</button></span></div>';
+  h += '<div class="thSo">' +
+    '<div><b>' + K.tong.tong + '</b>' + (TH.loc === 'binh' ? 'Tổng số bình' : 'Tổng phương tiện') + '</div>' +
+    '<div class="ok"><b>' + tl + '</b>Đã kiểm tra (' + phanTram(tl, K.tong.tong) + '%)</div>' +
+    '<div class="dat"><b>' + K.tong.dat + '</b>Đạt</div>' +
+    '<div class="khong"><b>' + K.tong.khong + '</b>Không đạt</div>' +
+    '<div class="chua"><b>' + K.tong.chua + '</b>Chưa kiểm tra</div>' +
+    '<div class="thay"><b>' + K.tong.thay + '</b>Thay mới trong tháng</div></div>';
+  // bieu do 12 thang: cot chong dat / khong dat / chua kiem tra
+  const cao = 110;
+  h += '<div class="thBieu"><div class="thTieu">Tỉ lệ kiểm tra từng tháng năm ' + TH.nam + '</div><div class="thCot">' +
+    K.thangs.map((m, i) => {
+      const n = m.dat + m.khong + m.chua;
+      const pc = phanTram(m.dat + m.khong, n);
+      const hc = k => (n ? (m[k] / n * cao).toFixed(1) : 0);
+      return '<div class="c' + (i + 1 === TH.thang ? ' on' : '') + '" data-thang="' + (i + 1) + '" title="Tháng ' + (i + 1) +
+        (n ? ': đạt ' + m.dat + ', không đạt ' + m.khong + ', chưa ' + m.chua : ': chưa tới') + '">' +
+        '<span class="pc">' + (n ? pc + '%' : '') + '</span>' +
+        '<div class="ong" style="height:' + cao + 'px">' +
+        (n ? '<i class="chua" style="height:' + hc('chua') + 'px"></i><i class="khong" style="height:' + hc('khong') +
+             'px"></i><i class="dat" style="height:' + hc('dat') + 'px"></i>' : '') +
+        '</div><span>T' + (i + 1) + '</span></div>';
+    }).join('') + '</div><div class="thChu"><i class="dat"></i>Đạt <i class="khong"></i>Không đạt <i class="chua"></i>Chưa kiểm tra</div></div>';
+  // bang theo cao trinh
+  h += '<div class="thTieu">Tháng ' + TH.thang + '/' + TH.nam + ' theo cao trình — bấm vào dòng để xem phương tiện chưa kiểm tra / không đạt</div>';
+  h += '<table class="thBang"><tr><th>Cao trình</th><th>Tổng</th><th>Đã KT</th><th>Đạt</th><th>Không đạt</th><th>Chưa KT</th><th>Thay mới</th><th style="width:26%">Tiến độ</th></tr>';
+  for (const g of K.dsTang) {
+    const kt = g.dat + g.khong, pc = phanTram(kt, g.tong);
+    const mo = TH.mo === g.f.page;
+    h += '<tr class="thTang' + (mo ? ' mo' : '') + (g.khong ? ' coLoi' : '') + '" data-page="' + g.f.page + '"><td>' + esc(g.f.name) +
+      '</td><td>' + g.tong + '</td><td>' + kt + '</td><td>' + g.dat + '</td><td class="' + (g.khong ? 'do' : '') + '">' + g.khong +
+      '</td><td class="' + (g.chua ? 'vang' : '') + '">' + g.chua + '</td><td>' + (g.thay || '') + '</td>' +
+      '<td><div class="tien"><i style="width:' + pc + '%" class="' + (g.khong ? 'loi' : pc === 100 ? 'du' : '') + '"></i><span>' +
+      (g.sau === g.tong ? '—' : pc + '%') + '</span></div></td></tr>';
+    if (mo) {
+      const can = g.ds.filter(x => x.r.tt === 'khong' || x.r.tt === 'chua');
+      h += '<tr class="thCT"><td colspan="8">' + (can.length
+        ? '<table><tr><th>Ký mã hiệu</th><th>Phương tiện</th><th>Tình trạng</th><th>Ngày</th><th>Người kiểm tra</th></tr>' +
+          can.sort((a, b) => (a.r.tt === 'khong' ? 0 : 1) - (b.r.tt === 'khong' ? 0 : 1)).map(x =>
+            '<tr class="thMo" data-k="' + esc(x.p.khoa) + '"><td>' + esc(x.p.ky) + '</td><td>' + esc(x.p.ten) +
+            '</td><td class="' + (x.r.tt === 'khong' ? 'do' : 'vang') + '">' + (x.r.tt === 'khong' ? esc(x.r.kq) : TT_CHU.chua) +
+            '</td><td>' + esc(x.r.ngay) + '</td><td>' + esc(x.r.nguoi) + '</td></tr>').join('') + '</table>'
+        : '<div class="du">✔ Tất cả phương tiện của cao trình này đã kiểm tra đạt.</div>') + '</td></tr>';
+    }
+  }
+  const pcT = phanTram(tl, K.tong.tong);
+  h += '<tr class="thTong"><td>TỔNG</td><td>' + K.tong.tong + '</td><td>' + tl + '</td><td>' + K.tong.dat + '</td><td>' + K.tong.khong +
+    '</td><td>' + K.tong.chua + '</td><td>' + (K.tong.thay || '') + '</td><td>' + pcT + '%</td></tr></table>';
+  if (KQ_API && KQ_API._loi) h += '<div class="thGhi">⚠ Không đọc được bảng kiểm tra trên Drive: ' + esc(KQ_API._loi.join('; ')) + '</div>';
+  h += '<div class="thGhi">Nguồn: ô ghi tay trên thẻ, bảng theo dõi Excel hằng tháng (Google Drive) và phiếu kiểm tra đã nạp.</div></div>';
+  goc.innerHTML = h;
+  goc.style.display = 'flex';
+  goc._k = K;
+  goc._ky = kyHieuDuLieu();
+  goc.querySelector('.thDong').onclick = () => { goc.style.display = 'none'; };
+  goc.onclick = e => { if (e.target === goc) goc.style.display = 'none'; };
+  goc.querySelectorAll('[data-nam]').forEach(b => b.onclick = () => {
+    TH.nam = Math.min(namNay, TH.nam + (+b.dataset.nam));
+    if (TH.nam === namNay) TH.thang = Math.min(TH.thang, nay.getMonth() + 1);
+    veTongHop();
+  });
+  goc.querySelectorAll('[data-thang]').forEach(b => b.onclick = () => {
+    const t = +b.dataset.thang;
+    if (TH.nam === namNay && t > nay.getMonth() + 1) return;
+    TH.thang = t; veTongHop();
+  });
+  goc.querySelectorAll('[data-loc]').forEach(b => b.onclick = () => { TH.loc = b.dataset.loc; veTongHop(); });
+  goc.querySelectorAll('.thTang').forEach(tr => tr.onclick = () => {
+    const p = +tr.dataset.page; TH.mo = TH.mo === p ? null : p; veTongHop();
+  });
+  goc.querySelectorAll('.thMo').forEach(tr => tr.onclick = () => {
+    const x = K.chiTiet.find(c => c.p.khoa === tr.dataset.k);
+    if (!x) return;
+    goc.style.display = 'none';
+    const row = document.querySelector('#floors .row[data-page="' + x.p.f.page + '"]');
+    if (row) row.click();
+    THE_NAM.nam = TH.nam;
+    if (x.p.khoa.startsWith('i:')) {
+      const it = state.data.items.find(i => 'i:' + i.id === x.p.khoa);
+      if (it) { state.selected = it.id; applyVisibility(); showInfo(it); return; }
+    }
+    const sM = mpp(), o = x.p.obj;
+    veTheKiemTra(x.p.khoa, x.p.f.page, x.p.ten, x.p.ky,
+      x.p.f.name + (o ? ' — X ' + (o.u0 * sM).toFixed(1) + ' m · Y ' + (o.v0 * sM).toFixed(1) + ' m' : ''));
+  });
+  goc.querySelector('.thExcel').onclick = () => xuatExcelTongHop(K);
+  goc.querySelector('.thPdf').onclick = () => inTongHop(K);
+}
+
+// Du lieu (ban ve, binh tu ve, ket qua Excel/phieu) nap khong dong bo: bang dang
+// mo ma du lieu vua toi thi tinh lai, khong de so lieu thieu.
+function kyHieuDuLieu() {
+  let n = state.data ? state.data.items.length : 0;
+  for (const k in state.custom) n += state.custom[k].length * 1000;
+  return n + ':' + Object.keys(KQ_API || {}).length + ':' + Object.keys(KQ_PHIEU || {}).length;
+}
+setInterval(() => {
+  const goc = document.getElementById('tongHop');
+  if (goc && goc.style.display === 'flex' && goc._ky !== kyHieuDuLieu()) {
+    const cuon = goc.scrollTop; veTongHop(); goc.scrollTop = cuon;
+  }
+}, 3000);
+
+// ---- xuat Excel (SheetJS, nap khi can)
+function napSheetJS() {
+  if (window.XLSX) return Promise.resolve(window.XLSX);
+  return new Promise((ok, loi) => {
+    const s = document.createElement('script');
+    s.src = './vendor/xlsx.full.min.js';
+    s.onload = () => ok(window.XLSX);
+    s.onerror = () => loi(new Error('Không nạp được thư viện Excel'));
+    document.head.appendChild(s);
+  });
+}
+async function xuatExcelTongHop(K) {
+  let X;
+  try { X = await napSheetJS(); } catch (e) { alert(e.message); return; }
+  const tieuDe = 'TỔNG HỢP KIỂM TRA PHƯƠNG TIỆN PCCC THÁNG ' + K.thang + '/' + K.nam;
+  const nm = TEN_NHA_MAY[nhaMayDang] || '';
+  const s1 = [[tieuDe], [nm + ' — ' + TEN_LOC[TH.loc]], [],
+    ['Cao trình', 'Tổng', 'Đã kiểm tra', 'Đạt', 'Không đạt', 'Chưa kiểm tra', 'Thay mới', 'Tỉ lệ đã KT (%)']];
+  for (const g of K.dsTang) s1.push([g.f.name, g.tong, g.dat + g.khong, g.dat, g.khong, g.chua, g.thay, phanTram(g.dat + g.khong, g.tong)]);
+  const T = K.tong;
+  s1.push(['TỔNG', T.tong, T.dat + T.khong, T.dat, T.khong, T.chua, T.thay, phanTram(T.dat + T.khong, T.tong)]);
+  const s2 = [['CHI TIẾT THÁNG ' + K.thang + '/' + K.nam], [],
+    ['STT', 'Cao trình', 'Ký mã hiệu', 'Phương tiện', 'Ngày kiểm tra', 'Kết quả', 'Người kiểm tra', 'Thay mới']];
+  const thuTu = new Map(K.dsTang.map((g, i) => [g.f.page, i]));
+  const ct = K.chiTiet.slice().sort((a, b) => thuTu.get(a.p.f.page) - thuTu.get(b.p.f.page));
+  ct.forEach((c, i) => s2.push([i + 1, c.p.f.name, c.p.ky, c.p.ten, c.r.ngay || '',
+    c.r.tt === 'chua' ? 'Chưa kiểm tra' : c.r.kq, c.r.nguoi || '', c.r.thay ? 'Có' : '']));
+  const s3 = [['KẾT QUẢ CẢ NĂM ' + K.nam + ' (Đ: đạt, K: không đạt, trống: chưa kiểm tra, —: chưa tới tháng)'], [],
+    ['Cao trình', 'Ký mã hiệu', 'Phương tiện'].concat(Array.from({ length: 12 }, (_, i) => 'T' + (i + 1)))];
+  for (const c of ct) s3.push([c.p.f.name, c.p.ky, c.p.ten].concat(c.kqs.map(r => ({ dat: 'Đ', khong: 'K', chua: '', sau: '—' })[r.tt])));
+  const s4 = [['TỈ LỆ KIỂM TRA THEO THÁNG NĂM ' + K.nam], [], ['Tháng', 'Đạt', 'Không đạt', 'Chưa kiểm tra', 'Tỉ lệ đã KT (%)']];
+  K.thangs.forEach((m, i) => { const n = m.dat + m.khong + m.chua; if (n) s4.push(['T' + (i + 1), m.dat, m.khong, m.chua, phanTram(m.dat + m.khong, n)]); });
+  const wb = X.utils.book_new();
+  const them = (aoa, ten, rong) => { const ws = X.utils.aoa_to_sheet(aoa); ws['!cols'] = rong.map(w => ({ wch: w })); X.utils.book_append_sheet(wb, ws, ten); };
+  them(s1, 'Tong hop T' + K.thang, [34, 8, 12, 8, 11, 14, 10, 15]);
+  them(s2, 'Chi tiet T' + K.thang, [6, 30, 30, 22, 14, 14, 24, 10]);
+  them(s3, 'Ca nam ' + K.nam, [30, 30, 22].concat(Array(12).fill(5)));
+  them(s4, 'Theo thang', [8, 8, 11, 14, 15]);
+  X.writeFile(wb, 'Tong hop kiem tra PCCC T' + String(K.thang).padStart(2, '0') + '-' + K.nam + ' - ' + (nhaMayDang === 'nm' ? 'Ialy' : 'Ialy MR') + '.xlsx');
+}
+
+// ---- in / luu PDF: dung trang bao cao nen trang trong khung an roi goi print()
+function inTongHop(K) {
+  const T = K.tong, nm = TEN_NHA_MAY[nhaMayDang] || '';
+  const dong = K.dsTang.map(g => '<tr><td class="l">' + esc(g.f.name) + '</td><td>' + g.tong + '</td><td>' + (g.dat + g.khong) +
+    '</td><td>' + g.dat + '</td><td>' + g.khong + '</td><td>' + g.chua + '</td><td>' + (g.thay || '') + '</td><td>' +
+    phanTram(g.dat + g.khong, g.tong) + '%</td></tr>').join('');
+  const can = K.chiTiet.filter(c => c.r.tt === 'khong' || c.r.tt === 'chua');
+  const thuTu = new Map(K.dsTang.map((g, i) => [g.f.page, i]));
+  can.sort((a, b) => thuTu.get(a.p.f.page) - thuTu.get(b.p.f.page));
+  const dsCan = can.length ? '<h2>Phương tiện chưa kiểm tra / không đạt (' + can.length + ')</h2><table><tr><th>STT</th><th>Cao trình</th><th>Ký mã hiệu</th><th>Phương tiện</th><th>Tình trạng</th></tr>' +
+    can.map((c, i) => '<tr><td>' + (i + 1) + '</td><td class="l">' + esc(c.p.f.name) + '</td><td class="l">' + esc(c.p.ky) + '</td><td class="l">' +
+      esc(c.p.ten) + '</td><td>' + (c.r.tt === 'khong' ? esc(c.r.kq) : 'Chưa kiểm tra') + '</td></tr>').join('') + '</table>' : '';
+  const thangs = K.thangs.map((m, i) => { const n = m.dat + m.khong + m.chua;
+    return '<td>' + (n ? phanTram(m.dat + m.khong, n) + '%' : '—') + '</td>'; }).join('');
+  const t = new Date();
+  const html = '<!doctype html><html><head><meta charset="utf-8"><title>Tong hop kiem tra PCCC T' + K.thang + '-' + K.nam + '</title><style>' +
+    '@page{size:A4;margin:15mm 14mm}body{font-family:"Times New Roman",serif;font-size:12.5px;color:#000}' +
+    'h1{font-size:16px;text-align:center;margin:4px 0}h2{font-size:13.5px;margin:14px 0 5px}.nm{text-align:center;font-weight:bold;font-size:13px}' +
+    '.ngay{text-align:center;font-style:italic;margin-bottom:8px}table{width:100%;border-collapse:collapse;page-break-inside:auto}' +
+    'tr{page-break-inside:avoid}th,td{border:1px solid #000;padding:3px 4px;text-align:center}th{background:#eee}td.l{text-align:left}' +
+    '.tong td{font-weight:bold}.ky{display:flex;justify-content:space-between;margin-top:26px;text-align:center}.ky div{width:45%}' +
+    '</style></head><body><div class="nm">' + esc(nm.toUpperCase()) + '</div>' +
+    '<h1>TỔNG HỢP KIỂM TRA PHƯƠNG TIỆN PCCC THÁNG ' + K.thang + '/' + K.nam + '</h1>' +
+    '<div class="ngay">(' + TEN_LOC[TH.loc] + ')</div>' +
+    '<div class="ngay">Lập ngày ' + t.getDate() + ' tháng ' + (t.getMonth() + 1) + ' năm ' + t.getFullYear() + '</div>' +
+    '<h2>1. Kết quả theo cao trình</h2><table><tr><th>Cao trình</th><th>Tổng</th><th>Đã KT</th><th>Đạt</th><th>Không đạt</th><th>Chưa KT</th><th>Thay mới</th><th>Tỉ lệ</th></tr>' +
+    dong + '<tr class="tong"><td>TỔNG</td><td>' + T.tong + '</td><td>' + (T.dat + T.khong) + '</td><td>' + T.dat + '</td><td>' + T.khong +
+    '</td><td>' + T.chua + '</td><td>' + (T.thay || '') + '</td><td>' + phanTram(T.dat + T.khong, T.tong) + '%</td></tr></table>' +
+    '<h2>2. Tỉ lệ đã kiểm tra từng tháng năm ' + K.nam + '</h2><table><tr>' +
+    Array.from({ length: 12 }, (_, i) => '<th>T' + (i + 1) + '</th>').join('') + '</tr><tr>' + thangs + '</tr></table>' +
+    (dsCan ? dsCan.replace('<h2>', '<h2>3. ') : '') +
+    '<div class="ky"><div><b>NGƯỜI LẬP</b><br><br><br><br></div><div><b>QUẢN ĐỐC PHÂN XƯỞNG</b><br><br><br><br></div></div>' +
+    '</body></html>';
+  let ifr = document.getElementById('khungIn');
+  if (ifr) ifr.remove();
+  ifr = document.createElement('iframe');
+  ifr.id = 'khungIn';
+  ifr.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0';
+  document.body.appendChild(ifr);
+  ifr.contentDocument.open(); ifr.contentDocument.write(html); ifr.contentDocument.close();
+  setTimeout(() => { ifr.contentWindow.focus(); ifr.contentWindow.print(); }, 250);
+}
+
 // The thong tin cho VAT TU VE (hong nuoc, nut an, binh tu ve, FM-200).
 const TEN_LOAI_VE = { hong: 'Họng lấy nước chữa cháy', nutbao: 'Nút ấn báo cháy',
                       bin: 'Bình chữa cháy xách tay', fm200: 'Bình khí FM-200' };
@@ -8059,6 +8346,7 @@ window.IALY = {
   oLuoi(x, z) { return wk.luoi ? (wk.luoi.trong(x, z) ? 1 : 0) : -1; },
   moThe(id) { const it = state.data.items.find(x => x.id === id); if (it) showInfo(it); return !!it; },
   dsThay() { moDsThayMoi(); return dsThayMoi().length; },
+  tongHop(nam, thang) { if (nam) TH.nam = nam; if (thang) TH.thang = thang; veTongHop(); const K = $('#tongHop')._k; return { tong: K.tong, tang: K.dsTang.map(g => [g.f.name, g.tong, g.dat, g.khong, g.chua]), thangs: K.thangs }; },
   thuChatLuong(n, dt) { for (let i = 0; i < n; i++) chinhChatLuong(dt); return this.chatLuong(); },
   chatLuong() { return { bac: CL.bac, ema: +(CL.ema * 1000).toFixed(1), ao: state.aoDiBo !== false, tiLe: renderer.getPixelRatio(), bong: renderer.shadowMap.enabled }; },
   // diem dung truoc cua vao moi buong thang (phia chieu toi ngang san), nhin vao thang
@@ -8702,6 +8990,8 @@ if (btnWalk) btnWalk.onclick = function () {
 };
 const btnDsThay = document.querySelector('#dsThay');
 if (btnDsThay) btnDsThay.onclick = () => moDsThayMoi();
+const btnTongHop = document.querySelector('#tongHopBtn');
+if (btnTongHop) btnTongHop.onclick = () => veTongHop();
 const btnWalk3 = document.querySelector('#walk3');
 if (btnWalk3) btnWalk3.onclick = function () {
   if (wk.on && wk.ngoi3) { raDiBo(); return; }

@@ -127,6 +127,64 @@
   .objrow{display:flex;gap:6px;align-items:center;font-size:12px;padding:4px 6px;border-radius:5px}
   .objrow:hover{background:var(--panel2)}
   .objrow .x{cursor:pointer;color:#e2706a}
+  /* Bảng tổng hợp kiểm tra theo tháng */
+  #tongHop{position:fixed;inset:0;z-index:50;background:#05080cb8;display:none;align-items:flex-start;
+    justify-content:center;padding:24px 16px;overflow:auto}
+  #tongHop .thKhung{position:relative;width:min(980px,100%);background:var(--panel);border:1px solid var(--line);
+    border-radius:12px;padding:16px 18px 14px;box-shadow:0 12px 40px #000a}
+  #tongHop .close{position:absolute;right:12px;top:10px;cursor:pointer;color:var(--muted);font-size:16px}
+  #tongHop h3{margin:0 0 10px;font-size:16px;padding-right:26px}
+  #tongHop h3 small{font-weight:400;color:var(--muted);font-size:12px;margin-left:6px}
+  #tongHop .thChon{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:12px}
+  #tongHop .thChon b{font-size:14px;margin:0 2px}
+  #tongHop .thChon button{padding:4px 8px}
+  #tongHop .thChon button:disabled{opacity:.35;cursor:default}
+  #tongHop .thThangs{display:flex;gap:3px;flex-wrap:wrap;margin-left:8px}
+  #tongHop .thThangs button.on{background:#3a2a12;border-color:var(--accent);color:#ffd79a}
+  #tongHop .thXuat{margin-left:auto;display:flex;gap:6px}
+  #tongHop .thLoc{display:flex;gap:0;margin-left:8px}
+  #tongHop .thLoc button{border-radius:0}#tongHop .thLoc button:first-child{border-radius:6px 0 0 6px}
+  #tongHop .thLoc button:last-child{border-radius:0 6px 6px 0}#tongHop .thLoc button.on{background:#243244;border-color:#3b5570;color:#cfe6ff}
+  #tongHop .thSo{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:12px}
+  #tongHop .thSo div{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:8px 10px;
+    font-size:11.5px;color:var(--muted)}
+  #tongHop .thSo b{display:block;font-size:22px;color:var(--text)}
+  #tongHop .thSo .ok b{color:#58a6ff}#tongHop .thSo .dat b{color:var(--ok)}
+  #tongHop .thSo .khong b{color:#f85149}#tongHop .thSo .chua b{color:#d29922}#tongHop .thSo .thay b{color:#a5d6a7}
+  #tongHop .thTieu{font-size:12px;color:var(--muted);margin:4px 0 6px}
+  #tongHop .thBieu{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:8px 12px 6px;margin-bottom:12px}
+  #tongHop .thCot{display:grid;grid-template-columns:repeat(12,1fr);gap:6px;align-items:end}
+  #tongHop .thCot .c{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;color:var(--muted);cursor:pointer}
+  #tongHop .thCot .c.on span{color:#ffd79a;font-weight:700}
+  #tongHop .thCot .ong{width:70%;max-width:46px;display:flex;flex-direction:column;justify-content:flex-end;
+    background:#0f141a;border-radius:4px 4px 0 0;overflow:hidden}
+  #tongHop .thCot .c.on .ong{outline:1px solid var(--accent)}
+  #tongHop i.dat{background:var(--ok)}#tongHop i.khong{background:#f85149}#tongHop i.chua{background:#4a5563}
+  #tongHop .thCot i{display:block;width:100%}
+  #tongHop .thCot .pc{font-size:10.5px;color:var(--text);min-height:14px}
+  #tongHop .thChu{font-size:11px;color:var(--muted);margin-top:6px;display:flex;gap:6px;align-items:center}
+  #tongHop .thChu i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-left:8px}
+  #tongHop table.thBang{width:100%;border-collapse:collapse;font-size:12.5px}
+  #tongHop .thBang th{text-align:center;font-weight:600;color:var(--muted);font-size:11.5px;border-bottom:1px solid var(--line);padding:6px 4px}
+  #tongHop .thBang td{padding:5px 4px;border-bottom:1px solid #222a35;text-align:center}
+  #tongHop .thBang td:first-child{text-align:left}
+  #tongHop tr.thTang{cursor:pointer}
+  #tongHop tr.thTang:hover td,#tongHop tr.thTang.mo td{background:#1d2733}
+  #tongHop td.do{color:#f85149;font-weight:700}#tongHop td.vang{color:#d29922}
+  #tongHop .tien{position:relative;height:14px;background:#0f141a;border-radius:7px;overflow:hidden}
+  #tongHop .tien i{position:absolute;left:0;top:0;bottom:0;background:#2f81f7}
+  #tongHop .tien i.du{background:var(--ok)}#tongHop .tien i.loi{background:#d2862a}
+  #tongHop .tien span{position:relative;font-size:10.5px;line-height:14px}
+  #tongHop tr.thTong td{font-weight:700;border-top:1px solid var(--line)}
+  #tongHop tr.thCT>td{background:#121820;padding:6px 10px}
+  #tongHop tr.thCT table{width:100%;border-collapse:collapse;font-size:12px}
+  #tongHop tr.thCT th{color:var(--muted);font-weight:500;text-align:left;padding:3px 6px}
+  #tongHop tr.thCT td{text-align:left;padding:3px 6px;border-bottom:1px solid #1c232c}
+  #tongHop tr.thMo{cursor:pointer}#tongHop tr.thMo:hover td{background:#243244}
+  #tongHop .du{color:var(--ok);font-size:12px}
+  #tongHop .thGhi{font-size:11px;color:var(--muted);margin-top:8px}
+  @media (max-width:760px){#tongHop{padding:8px}#tongHop .thKhung{padding:12px 10px}#tongHop .thSo{grid-template-columns:repeat(3,1fr)}#tongHop .thSo b{font-size:18px}#tongHop .thXuat,#tongHop .thLoc,#tongHop .thThangs{margin-left:0}#tongHop .thCot{gap:2px}#tongHop .thCot .pc{font-size:8.5px}#tongHop .thBang{font-size:11.5px}#tongHop .thBang th:nth-child(3),#tongHop .thBang td:nth-child(3){display:none}
+    #tongHop .thBang th:nth-child(7),#tongHop .thBang td:nth-child(7){display:none}}
   #dhint{position:absolute;left:50%;transform:translateX(-50%);bottom:42px;background:#0b0e13e6;
     border:1px solid var(--line);border-radius:8px;padding:7px 12px;font-size:12px;display:none}
 </style>
@@ -304,6 +362,7 @@
           <button id="walk">🚶 Góc nhìn thứ nhất</button>
           <button id="walk3">🧍 Góc nhìn thứ ba</button>
           <button id="dsThay">🔄 Bình đã thay mới</button>
+          <button id="tongHopBtn">📊 Tổng hợp kiểm tra tháng</button>
           <button id="reset" style="display:none" class="pri">Góc nhìn mặc định</button>
           <button id="csv" style="display:none">Xuất CSV</button>
         </div>
@@ -328,7 +387,7 @@
 <script type="importmap">
 { "imports": { "three": "./vendor/three.module.js" } }
 </script>
-<script type="module" src="./app.js?v=1792613485"></script>
+<script type="module" src="./app.js?v=1792974245"></script>
 <div id="wkHud" style="display:none;position:fixed;left:50%;bottom:26px;transform:translateX(-50%);
      background:rgba(16,21,28,.88);border:1px solid #2b3540;border-radius:10px;padding:10px 16px;
      color:#e6edf3;font:13px/1.5 system-ui;z-index:50;text-align:center;min-width:280px"></div>
