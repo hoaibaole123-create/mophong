@@ -43,8 +43,10 @@ async function docFile(id) {
       const ngay = ngayVN(row[4]);
       // trang thang moi thuong chep tu thang truoc, ngay van la thang cu -> chua
       // kiem tra that, bo qua cho toi khi dien ngay dung thang
-      const mt = ngay.match(/^\d{2}\/(\d{2})\//);
-      if (mt && String(+mt[1]) !== thang) continue;
+      // trang thang moi chep san cot danh gia nhung chua co ngay -> chua kiem tra
+      // (dot kiem tra hang thang lam tu khoang ngay 20) -> bat buoc co ngay dung thang
+      const mt = ngay.match(/^\d{2}\/(\d{2})\/\d{4}$/);
+      if (!mt || String(+mt[1]) !== thang) continue;
       const nam = (ngay.match(/\/(\d{4})$/) || [])[1] || String(new Date().getFullYear());
       const o = { ngay: ngay, kq: ketQua(row[5]), nguoi: (String(row[6] || '').trim() || nguoiTruoc) };
       if (/thay\s*(mới|bình|moi)/i.test(String(row[5] || ''))) o.thay = true;

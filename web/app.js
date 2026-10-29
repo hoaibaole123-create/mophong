@@ -5291,6 +5291,13 @@ function kqApiNam(nam) {
   if (ks.length && ks.every(k => /^\d{1,2}$/.test(k))) return nam === new Date().getFullYear() ? KQ_API : {};
   return (KQ_API && KQ_API[String(nam)]) || {};
 }
+// Mot o cua bang Excel chi tinh la DA KIEM TRA khi co ngay kiem tra dung thang va
+// thang do da toi (trang thang moi hay chep san cot danh gia ma chua dien ngay).
+function coKqBang(v, nam, t) {
+  if (!v || !/^\d{2}\/\d{2}\/\d{4}$/.test(v.ngay || '')) return false;
+  const nay = new Date();
+  return nam * 100 + +t <= nay.getFullYear() * 100 + nay.getMonth() + 1;
+}
 // Du lieu the theo NAM. The cu chi co d.hang (mot nam) -> chuyen vao d.nam[nam].
 function theNam(d, nam) {
   d.nam = d.nam || {};
@@ -5315,7 +5322,7 @@ function thayTuBang(ky) {
     if (!/^\d{4}$/.test(n)) continue;
     for (const t in KQ_API[n]) {
       const v = KQ_API[n][t] && KQ_API[n][t][chuanTen(ky)];
-      if (v && v.thay) ra.push({ ngay: v.ngay, lyDo: 'Ghi trong bảng kiểm tra tháng ' + t + '/' + n, bang: true });
+      if (v && v.thay && coKqBang(v, +n, t)) ra.push({ ngay: v.ngay, lyDo: 'Ghi trong bảng kiểm tra tháng ' + t + '/' + n, bang: true });
     }
   }
   return ra;
@@ -5333,7 +5340,7 @@ function veTheKiemTra(khoa, page, tenPT, ky, ghiChu) {
   // nam co du lieu (ghi tay + bang Excel): biet nam nao con the cu
   const coNam = new Set(Object.keys(d.nam || {}).filter(y => (d.nam[y].hang || []).some(Boolean)).map(Number));
   for (const n of Object.keys(KQ_API || {})) {
-    if (/^\d{4}$/.test(n) && Object.values(KQ_API[n]).some(t => t && t[chuanTen(ky)])) coNam.add(+n);
+    if (/^\d{4}$/.test(n) && Object.keys(KQ_API[n]).some(t => coKqBang((KQ_API[n][t] || {})[chuanTen(ky)], +n, t))) coNam.add(+n);
   }
   let h = '<div class="tpccc"><h4>THẺ THEO DÕI KẾT QUẢ KIỂM TRA<br>PHƯƠNG TIỆN PCCC</h4>';
   h += '<div class="namThe"><button data-nam="-1" title="Năm trước">◀</button><b>Năm ' + nam + '</b>' +
@@ -5357,7 +5364,7 @@ function veTheKiemTra(khoa, page, tenPT, ky, ghiChu) {
   const api = kqApiNam(nam);
   for (const t in api) {
     const v = api[t] && api[t][chuanTen(ky)];
-    if (v) ngoai[t] = v;
+    if (coKqBang(v, nam, t)) ngoai[t] = v;
   }
   for (let i = 0; i < 12; i++) {
     // o nao go tay thi lay o do, o de trong thi lay theo bang/phieu
@@ -5511,6 +5518,7 @@ function dsPhuongTien(loc) {
   return loc === 'binh' ? ra.filter(p => LA_BINH(p.loai)) : ra;
 }
 
+const NGAY_DOT_KT = 20;
 const KHONG_DAT = /không|khong|hỏng|hư|thất\s*bại|mất\s*áp|ko\b|k\.?\s*đ/i;
 // Ket qua thang `t` (1..12) nam `nam` cua mot phuong tien -> {tt, ngay, kq, nguoi, thay}
 // tt: 'dat' | 'khong' | 'chua' | 'sau' (thang chua toi)
@@ -5521,11 +5529,15 @@ function kqThang(p, nam, t, api) {
   let tay = (((d.nam || {})[nam] || {}).hang || [])[t - 1];
   if (!tay && d.hang && d.hang[t - 1] && String(d.hang[t - 1].ngay || '').endsWith('/' + nam)) tay = d.hang[t - 1];
   tay = tay || {};
-  const tu = ((api[String(t)] || {})[chuanTen(p.ky)]) ||
+  const vb = (api[String(t)] || {})[chuanTen(p.ky)];
+  const tu = (coKqBang(vb, nam, t) ? vb : null) ||
              (nam === nay.getFullYear() ? (KQ_PHIEU[p.khoa] || {})[String(t)] : null) || {};
   const r = { ngay: tay.ngay || tu.ngay || '', kq: tay.kq || tu.kq || '', nguoi: tay.nguoi || tu.nguoi || '' };
   r.thay = !!tu.thay || (d.lichSu || []).some(x => new RegExp('/' + String(t).padStart(2, '0') + '/' + nam + '$').test(x.ngay || ''));
   r.tt = !r.kq && !r.ngay ? 'chua' : KHONG_DAT.test(r.kq) ? 'khong' : 'dat';
+  // dot kiem tra hang thang lam tu khoang ngay 20: thang hien tai truoc ngay do ma
+  // chua co ket qua thi chua toi han, khong tinh la chua kiem tra
+  if (r.tt === 'chua' && nam === nay.getFullYear() && t === nay.getMonth() + 1 && nay.getDate() < NGAY_DOT_KT) r.tt = 'sau';
   return r;
 }
 
@@ -5581,6 +5593,9 @@ function veTongHop() {
     '<div class="khong"><b>' + K.tong.khong + '</b>Không đạt</div>' +
     '<div class="chua"><b>' + K.tong.chua + '</b>Chưa kiểm tra</div>' +
     '<div class="thay"><b>' + K.tong.thay + '</b>Thay mới trong tháng</div></div>';
+  if (K.tong.sau && K.tong.sau === K.tong.tong)
+    h += '<div class="thBao">⏳ Tháng ' + TH.thang + '/' + TH.nam + ' chưa tới đợt kiểm tra (đợt kiểm tra hằng tháng làm từ khoảng ngày ' +
+         NGAY_DOT_KT + '). Phương tiện chưa có kết quả không bị tính là chưa kiểm tra.</div>';
   // bieu do 12 thang: cot chong dat / khong dat / chua kiem tra
   const cao = 110;
   h += '<div class="thBieu"><div class="thTieu">Tỉ lệ kiểm tra từng tháng năm ' + TH.nam + '</div><div class="thCot">' +
@@ -5620,7 +5635,7 @@ function veTongHop() {
   }
   const pcT = phanTram(tl, K.tong.tong);
   h += '<tr class="thTong"><td>TỔNG</td><td>' + K.tong.tong + '</td><td>' + tl + '</td><td>' + K.tong.dat + '</td><td>' + K.tong.khong +
-    '</td><td>' + K.tong.chua + '</td><td>' + (K.tong.thay || '') + '</td><td>' + pcT + '%</td></tr></table>';
+    '</td><td>' + K.tong.chua + '</td><td>' + (K.tong.thay || '') + '</td><td>' + (K.tong.sau === K.tong.tong ? '—' : pcT + '%') + '</td></tr></table>';
   if (KQ_API && KQ_API._loi) h += '<div class="thGhi">⚠ Không đọc được bảng kiểm tra trên Drive: ' + esc(KQ_API._loi.join('; ')) + '</div>';
   h += '<div class="thGhi">Nguồn: ô ghi tay trên thẻ, bảng theo dõi Excel hằng tháng (Google Drive) và phiếu kiểm tra đã nạp.</div></div>';
   goc.innerHTML = h;
